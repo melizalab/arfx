@@ -37,15 +37,16 @@ pcmfile_init(PcmfileObject* self, PyObject* args, PyObject *kwds)
         char *filename;
         char *mode = "r";
 
-        // there's got to be a better way to ignore extra arguments.
-        // mode will not get set properly if set as a keyword arg, but we don't
-        // support writing here anyway
+        // there's got to be a better way to ignore extra arguments. mode will
+        // not get set properly if set as a keyword arg, but we don't support
+        // writing here anyway
 	if (!PyArg_ParseTuple(args, "s|s", &filename, &mode))
                 return -1;
 
         // write mode is disabled for arfx
         if (strcmp(mode,"r") != 0) {
                 PyErr_Format(PyExc_ValueError, "Writing to pcm_seq2 files is not supported", filename);
+                return -1;
         }
 
         if (self->pfp)

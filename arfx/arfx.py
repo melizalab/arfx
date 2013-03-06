@@ -19,9 +19,10 @@ arfx:      general-purpose compression/extraction utility with tar-like syntax
 
 __version__ = "2.0.0"
 
-import os, sys, getopt, posixpath
+import os, sys, posixpath
+import argparse
 import arf
-import io
+from . import io
 from tools import filecache
 
 # defaults for user options
@@ -123,12 +124,16 @@ def add_entries(tgt, files, **options):
     Additional keyword arguments specify metadata on the newly created
     entries.
     """
-    compress = options.get('compress',None)
-    ebase = options.get('entry_base',None)
+    compress = options.get('compress', None)
+    ebase = options.get('template', None)
+    metadata = options.get('attrs', None) or dict()
+    datatype = options.get('datatype', arf.DataTypes.UNDEFINED)
     chan = "pcm"                # only pcm data can be imported
-    arfp = arf.file(tgt,'a')
-    try:
-        metadata = options['entry_attrs']
+
+    if len(files) == 0:
+        raise ValueError, "must specify one or more input files"
+
+    with arf.file(tgt,'a') as arfp:
         for f in files:
             try:
                 for fp,entry_index,entry_name in iter_entries(f):
@@ -138,31 +143,30 @@ def add_entries(tgt, files, **options):
                         if hasattr(fp,'fp') and hasattr(fp.fp,'fileno'):
                             timestamp = os.fstat(fp.fp.fileno()).st_mtime
                         else:
-                            raise ValueError, "File is missing required timestamp"
+                            raise ValueError, "%s/%d missing required timestamp" % (f,entry_index)
                     if not hasattr(fp,'sampling_rate'):
-                        raise ValueError, "File is missing required sampling_rate attribute"
+                        raise ValueError, "%s/%d missing required sampling_rate attribute" % (f,entry_index)
 
                     if ebase is not None:
                         entry_name = default_entry_template.format(base=ebase, index=arfp.nentries)
                     entry = arfp.create_entry(entry_name, timestamp, **metadata)
 
                     entry.add_data(chan, fp.read(),
-                                   datatype=options['datatype'],
+                                   datatype=datatype,
                                    sampling_rate=fp.sampling_rate,
                                    compression=compress,
                                    source_file=f,
                                    source_entry=entry_index)
                     if options['verbose']:
                         print "%s/%d -> /%s/%s" % (f, entry_index, entry_name, chan)
-            except TypeError, e:
-                print "%s: Unrecognized format (%s)" % (f,e)
-            except IOError, e:
-                print "%s: Error opening file (%s)" % (f,e)
-            except ValueError, e:
-                print "%s: Error creating entry (%s)" % (f,e)
-    finally:
-        arfp.__exit__(None,None,None)
+            except Exception, e:
+                print "arfx: input error: %s" % e
 
+def create_and_add_entries(tgt, files, **options):
+    """ Add data to a new file. If the file exists it's deleted """
+    if os.path.exists(tgt):
+        os.remove(tgt)
+    add_entries(tgt, files, **options)
 
 def extract_entries(src, entries, **options):
     """
@@ -174,9 +178,13 @@ def extract_entries(src, entries, **options):
              case all the entries are extracted
     entry_base: if specified, name the output files sequentially
     """
+    if not os.path.exists(src):
+        raise IOError, "the file %s does not exist" % src
+
     if len(entries)==0: entries = None
-    arfp = arf.file(src,'r')
-    try:
+    ebase = options.get('template', None)
+
+    with arf.file(src,'r') as arfp:
         for index,(ename,entry) in enumerate(arfp.items(key='timestamp')):
             attrs = dict(entry.attrs)
             if entries is None or ename in entries:
@@ -186,7 +194,7 @@ def extract_entries(src, entries, **options):
                                  dtype=dset.dtype,
                                  **dset.attrs)
                     fname = parse_name_template(dset,
-                                                options.get('entry_base',None) or default_extract_template,
+                                                ebase or default_extract_template,
                                                 index=index)
                     fp = io.open(fname, 'w', **attrs) # will throw error for unsupported format
 
@@ -202,8 +210,6 @@ def extract_entries(src, entries, **options):
 
                     if options['verbose']:
                         print "%s -> %s" % (dset.name, fname)
-    finally:
-        arfp.__exit__(None,None,None)
 
 
 def delete_entries(src, entries, **options):
@@ -213,25 +219,25 @@ def delete_entries(src, entries, **options):
     entries: list of the entries to delete
     repack: if True (default), repack the file afterward to reclaim space
     """
+    if not os.path.exists(src):
+        raise IOError, "the file %s does not exist" % src
     if entries is None or len(entries)==0: return
-    arfp = arf.file(src,'r+')
-    try:
+
+    with arf.file(src,'r+') as arfp:
         count = 0
         for entry in entries:
             if entry in arfp:
                 try:
-                    arfp.delete_entry(entry)
+                    del arfp[entry]
                     count += 1
                     if options['verbose']:
-                        print "/%s" % entry
+                        print "deleted /%s" % entry
                 except Exception, e:
                     print "Error deleting %s: %s" % (entry, e)
             elif options['verbose']:
                 print "/%s: no such entry" % entry
-    finally:
-        arfp.__exit__(None,None,None)
     if count > 0 and options['repack']:
-        repack_file((src,),**options)
+        repack_file(src, **options)
 
 def copy_entries(tgt, files, **options):
     """
@@ -241,40 +247,41 @@ def copy_entries(tgt, files, **options):
 
     entry_base: if specified, rename entries sequentially in target file
     """
-    ebase = options.get('entry_base',None)
-    arfp = arf.file(tgt,'a')
+    ebase = options.get('template', None)
     acache = filecache(arf.file)
 
-    for f in files:
-        # this is a bit tricky:
-        # file.arf is a file; file.arf/entry is entry
-        # dir/file.arf is a file; dir/file.arf/entry is entry
-        # on windows, dir\file.arf/entry is an entry
-        pn, fn = posixpath.split(f)
-        if os.path.isfile(f):
-            it = ((f,entry) for ename, entry in acache[f].items())
-        elif os.path.isfile(pn):
-            fp = acache[pn]
-            if fn in fp:
-                it = ((pn,fp[fn]),)
+    with arf.file(tgt,'a') as arfp:
+        for f in files:
+            # this is a bit tricky:
+            # file.arf is a file; file.arf/entry is entry
+            # dir/file.arf is a file; dir/file.arf/entry is entry
+            # on windows, dir\file.arf/entry is an entry
+            pn, fn = posixpath.split(f)
+            if os.path.isfile(f):
+                it = ((f,entry) for ename, entry in acache[f].items())
+            elif os.path.isfile(pn):
+                fp = acache[pn]
+                if fn in fp:
+                    it = ((pn,fp[fn]),)
+                else:
+                    print "Error: no such entry %s" % f
+                    continue
             else:
-                print "Error: no such entry %s" % f
+                print "Error: %s does not exist" % f
                 continue
-        else:
-            print "Error: %s does not exist" % f
-            continue
 
-        for fname,entry in it:
-            try:
-                if ebase is not None: entry_name = "%s_%04d" % (ebase, arfp.nentries)
-                else: entry_name=posixpath.basename(entry.name)
-                arfp.h5.copy(entry, arfp.h5, name=entry_name)
-                if options['verbose']:
-                    print "%s%s -> %s/%s" % (fname, entry.name, tgt, entry_name)
-            except ValueError:
-                print "Error: can't create entry %s/%s; already exists?" % (tgt,entry_name)
+            for fname,entry in it:
+                try:
+                    if ebase is not None:
+                        entry_name = default_entry_template.format(base=ebase, index=arfp.nentries)
+                    else:
+                        entry_name=posixpath.basename(entry.name)
+                    arfp.h5.copy(entry, arfp.h5, name=entry_name)
+                    if options['verbose']:
+                        print "%s%s -> %s/%s" % (fname, entry.name, tgt, entry_name)
+                except Exception,e:
+                    print "arfx: copy error for %s%s: %s" % (fname,entry.name,e)
 
-    arfp.__exit__(None,None,None)
     acache.__exit__(None,None,None)
 
 
@@ -285,9 +292,10 @@ def list_entries(src, entries, **options):
     entries: if None or empty, list all entries; otherwise only list entries
              that are in this list (more verbosely)
     """
-    arfp = arf.file(src,'r')
+    if not os.path.exists(src):
+        raise IOError, "the file %s does not exist" % src
     print "%s:" % src
-    try:
+    with arf.file(src,'r') as arfp:
         if entries is None or len(entries)==0:
             for name,entry in arfp.items(key='timestamp'):
                 if options.get('verbose',False):
@@ -298,8 +306,6 @@ def list_entries(src, entries, **options):
         else:
             for ename in entries:
                 if ename in arfp: print arfp[ename]
-    finally:
-        arfp.__exit__(None,None,None)
 
 def update_entries(src, entries, **options):
     """
@@ -308,12 +314,16 @@ def update_entries(src, entries, **options):
     entries: if None or empty, updates all entries. In this case, if the
              name parameter is set, the entries are renamed sequentially
     """
-    ebase = options.get('entry_base',None)
+    if not os.path.exists(src):
+        raise IOError, "the file %s does not exist" % src
+    ebase = options.get('template',None)
     if (entries is None or len(entries)==0) and ebase is not None and ebase.find('%') < 0:
         ebase += '_%04d'
+    metadata = options.get('attrs', None) or dict()
+    if 'datatype' in options:
+        metadata['datatype'] = options['datatype']
 
-    arfp = arf.file(src,'r+')
-    try:
+    with arf.file(src,'r+') as arfp:
         for i,entry in enumerate(arfp):
             if entries is None or len(entries)==0 or posixpath.relpath(entry) in entries:
                 enode = arfp[entry]
@@ -325,15 +335,13 @@ def update_entries(src, entries, **options):
                     name = ebase % i
                     arfp.h5[name] = enode
                     del arfp.h5[entry] # entry object should remain valid
-                arfp.set_attributes(enode, **options['entry_attrs'])
+                arfp.set_attributes(enode, **metadata)
                 if options.get('verbose',False):
                     print enode.__str__()
                     print "^^^^^^^^^^"
-    finally:
-        arfp.__exit__(None,None,None)
 
 
-def repack_file(files, **options):
+def repack_file(path, **options):
     """ Call h5repack on a list of files to repack them """
     from shutil import rmtree, copy
     from tempfile import mkdtemp
@@ -344,161 +352,89 @@ def repack_file(files, **options):
         cmd += "-f SHUF -f GZIP=%d " % compress
     try:
         tdir = mkdtemp()
-        for f in files:
-            if options['verbose']:
-                sys.stdout.write("Repacking %s..." % f)
-                sys.stdout.flush()
-            fdir,fbase = os.path.split(f)
-            os.system(cmd + f + " " + os.path.join(tdir, fbase))
-            copy(os.path.join(tdir, fbase), f)
-            if options['verbose']: sys.stdout.write("done\n")
+        if options['verbose']:
+            sys.stdout.write("Repacking %s..." % path)
+            sys.stdout.flush()
+        fdir,fbase = os.path.split(path)
+        os.system(cmd + path + " " + os.path.join(tdir, fbase))
+        copy(os.path.join(tdir, fbase), path)
+        if options['verbose']: sys.stdout.write("done\n")
     finally:
         rmtree(tdir)
 
+def upgrade_file(path, *args, **options):
+    pass
+
+class ParseKeyVal(argparse.Action):
+    def __call__(self, parser, namespace, arg, option_string=None):
+        kv = getattr(namespace, self.dest)
+        if kv is None:
+            kv = dict()
+        if not arg.count('=') == 1:
+            print >> sys.stderr, "-k %s argument badly formed; needs key=value" % arg
+        else:
+            key,val = arg.split('=')
+            kv[key] = val
+        setattr(namespace, self.dest, kv)
+
 
 def arfx():
-    """
-arfx is used to move data in and out of ARF containers.
 
-Usage: arfx [OPERATION] [OPTIONS] [FILES/ENTRIES]
+    p = argparse.ArgumentParser(description='copy data in and out of ARF files')
+    p.add_argument('entries', nargs='*')
+    p.add_argument('--version', action='version', version='%(prog)s ' + __version__)
+    p.add_argument('--help-datatypes', help='print available datatypes and exit',
+                   action='version', version=arf.DataTypes._doc())
 
-Operations:
- -A: add data from one container to another
- -c: create a new container
- -r: append data to the container
- -t: list contents of the container
- -U: update metadata of entries
- -x: extract entries from the container
- -d: delete entries from the container
+    # operations
+    pp = p.add_argument_group('Operations')
+    g = pp.add_mutually_exclusive_group(required=True)
+    g.add_argument('-A',help='copy data from another ARF file',
+                   action='store_const', dest='op', const=copy_entries)
+    g.add_argument('-c',help='create new file and add data',
+                   action='store_const', dest='op', const=create_and_add_entries)
+    g.add_argument('-r',help='add data to an existing file',
+                   action='store_const', dest='op', const=add_entries)
+    g.add_argument('-x',help='extract entries from a file',
+                   action='store_const', dest='op', const=extract_entries)
+    g.add_argument('-t',help='list contents of the file',
+                   action='store_const', dest='op', const=list_entries)
+    g.add_argument('-U',help='update metadata of entries',
+                   action='store_const', dest='op', const=update_entries)
+    g.add_argument('-d',help='delete entries',
+                   action='store_const', dest='op', const=delete_entries)
+    g.add_argument('--upgrade',help="migrate older ARF versions to %s" % __version__,
+                   action='store_const', dest='op', const=upgrade_file)
 
-Options:
- -f FILE: use ARF file FILE
- -D URI:  specify the URI of the database for storing record IDs.
-          None to use no database
- -v:      verbose output
- -n NAME: name entries sequentially, using NAME as the base
- -a ANIMAL: specify the animal
- -e EXPERIMENTER: specify the experimenter
- -p PROTOCOL: specify the protocol
- -s HZ:   specify the sampling rate of the data, in Hz
- -T DATATYPE: specify the data type (see --help-datatypes)
- -k KEY=VALUE: specifiy additional metadata
- -P:      when deleting entries, do not repack
- -u:      do not compress the data in the arf file
-    """
-    opts, args = getopt.gnu_getopt(sys.argv[1:], "AcrtUxdhf:D:vn:a:e:p:s:T:k:uP",
-                                   ["help", "version","help-datatypes"])
-    operation = None
+    g = p.add_argument_group('Options')
+    g.add_argument('-f',help='the ARF file to operate on',required=True,
+                   metavar='FILE', dest='arffile')
+    g.add_argument('-v',help='verbose output',action='store_true', dest='verbose')
+    g.add_argument('-n',help='name entries or files using %(metavar)s',
+                   metavar='TEMPLATE',dest='template')
+    g.add_argument('-T',help='specify data type (see --help-datatypes)',
+                   default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype')
+    g.add_argument('-k',help='specify attributes of entries', action=ParseKeyVal,
+                   metavar="KEY=VALUE", dest='attrs')
+    g.add_argument('-P',help="don't repack when deleting entries", action='store_false',
+                   dest='repack')
+    g.add_argument('-z',help="set compression level in ARF (default: %(default)s)", type=int,
+                   default=1, dest='compress')
 
-    arffile = None
-
-    for o,a in opts:
-        # quasi operations
-        if o in ('-h', '--help'):
-            print arfx.__doc__
-            sys.exit(0)
-        elif o == '--version':
-            print "%s version: %s" % (os.path.basename(sys.argv[0]), __version__)
-            sys.exit(0)
-        elif o == '--help-datatypes':
-            print arf.DataTypes._doc()
-            sys.exit(0)
-        # main operations
-        elif o == '-A':
-            operation = 'copy'
-        elif o == '-c':
-            operation = 'create'
-        elif o == '-r':
-            operation = 'append'
-        elif o == '-x':
-            operation = 'extract'
-        elif o == '-d':
-            operation = 'remove'
-        elif o == '-t':
-            operation = 'list'
-        elif o == '-U':
-            operation = 'update'
-        elif o == '-R':
-            operation = 'reconcile'
-        # options
-        elif o == '-f':
-            arffile = a
-        elif o == '-D':
-            if a == "None": a = None
-            defaults['db_uri'] = a
-        elif o == '-v':
-            defaults['verbose'] = True
-        elif o == '-n':
-            defaults['entry_base'] = a
-        elif o == '-a':
-            defaults['entry_attrs']['animal'] = a
-        elif o == '-e':
-            defaults['entry_attrs']['experimenter'] = a
-        elif o == '-p':
-            defaults['entry_attrs']['protocol'] = a
-        elif o == '-s':
-            defaults['sampling'] = float(a)
-        elif o == '-T':
-            get_data_type(a)
-        elif o == '-k':
-            try:
-                key,val = a.split('=')
-                defaults['entry_attrs'][key] = val
-            except ValueError:
-                print >> sys.stderr, "-k %s argument badly formed; needs key=value" % a
-        elif o == '-u':
-            defaults['compress'] = None
-        elif o == '-P':
-            defaults['repack'] = False
-        elif o == '--push':
-            defaults['push_db'] = True
-        elif o == '--pull':
-            defaults['push_db'] = False
-
-    if operation==None:
-        print arfx.__doc__
-        sys.exit(-1)
-
-    if arffile==None:
-        print "Error: must specify an ARF file (-f FILE)"
-        sys.exit(-1)
-
-    # parse arg list and dispatch - depends on operation
-    elif operation in ('copy','create','append'):
-        if len(args) < 1:
-            print >> sys.stderr, "Error: must specify one or more input files."
-            sys.exit(-1)
-    if operation in ('list','extract','remove','append','reconcile','update'):
-        if not os.path.exists(arffile):
-            print >> sys.stderr, "Error: %s does not exist." % arffile
-            sys.exit(-1)
-
-    if operation == 'list':
-        f = list_entries
-    elif operation == 'extract':
-        f = extract_entries
-    elif operation == 'update':
-        f = update_entries
-    elif operation == 'remove':
-        f = delete_entries
-    elif operation == 'copy':
-        f = copy_entries
-    elif operation == 'append':
-        f = add_entries
-    elif operation == 'create':
-        if os.path.exists(arffile):
-            os.remove(arffile)
-        f = add_entries
+    args = p.parse_args()
 
     try:
-        f(arffile, args, **defaults)
+        opts = args.__dict__.copy()
+        entries = opts.pop('entries')
+        args.op(args.arffile, entries, **opts)
     except Exception, e:
+        print >> sys.stderr, "arfx: error: %s" % e
         raise
-        print >> sys.stderr, e.message
         sys.exit(-1)
+    return 0
 
 if __name__=="__main__":
-    arfx()
+    sys.exit(arfx())
 
 # Variables:
 # End:
