@@ -93,7 +93,6 @@ def parse_name_template(dset, template, index=0, default="NA"):
     except ValueError, e:
         raise ValueError("Error in template: " + e.message)
 
-
 def iter_entries(src, cbase='pcm'):
     """
     Iterate through the entries and channels of a data source.
@@ -133,7 +132,7 @@ def add_entries(tgt, files, **options):
     if len(files) == 0:
         raise ValueError, "must specify one or more input files"
 
-    with arf.file(tgt,'a') as arfp:
+    with arf.file(tgt,'a',strict_version=True) as arfp:
         for f in files:
             try:
                 for fp,entry_index,entry_name in iter_entries(f):
@@ -184,7 +183,7 @@ def extract_entries(src, entries, **options):
     if len(entries)==0: entries = None
     ebase = options.get('template', None)
 
-    with arf.file(src,'r') as arfp:
+    with arf.file(src,'r',strict_version=True) as arfp:
         for index,(ename,entry) in enumerate(arfp.items(key='timestamp')):
             attrs = dict(entry.attrs)
             if entries is None or ename in entries:
@@ -223,7 +222,7 @@ def delete_entries(src, entries, **options):
         raise IOError, "the file %s does not exist" % src
     if entries is None or len(entries)==0: return
 
-    with arf.file(src,'r+') as arfp:
+    with arf.file(src,'r+',strict_version=True) as arfp:
         count = 0
         for entry in entries:
             if entry in arfp:
@@ -250,7 +249,7 @@ def copy_entries(tgt, files, **options):
     ebase = options.get('template', None)
     acache = filecache(arf.file)
 
-    with arf.file(tgt,'a') as arfp:
+    with arf.file(tgt,'a',strict_version=True) as arfp:
         for f in files:
             # this is a bit tricky:
             # file.arf is a file; file.arf/entry is entry
@@ -295,7 +294,7 @@ def list_entries(src, entries, **options):
     if not os.path.exists(src):
         raise IOError, "the file %s does not exist" % src
     print "%s:" % src
-    with arf.file(src,'r') as arfp:
+    with arf.file(src,'r',strict_version=True) as arfp:
         if entries is None or len(entries)==0:
             for name,entry in arfp.items(key='timestamp'):
                 if options.get('verbose',False):
@@ -323,7 +322,7 @@ def update_entries(src, entries, **options):
     if 'datatype' in options:
         metadata['datatype'] = options['datatype']
 
-    with arf.file(src,'r+') as arfp:
+    with arf.file(src,'r+',strict_version=True) as arfp:
         for i,entry in enumerate(arfp):
             if entries is None or len(entries)==0 or posixpath.relpath(entry) in entries:
                 enode = arfp[entry]
@@ -363,7 +362,9 @@ def repack_file(path, **options):
         rmtree(tdir)
 
 def upgrade_file(path, *args, **options):
-    pass
+    from . import migrate
+    migrate.migrate_file(path)
+    repack_file(path, **options)
 
 class ParseKeyVal(argparse.Action):
     def __call__(self, parser, namespace, arg, option_string=None):
@@ -429,7 +430,8 @@ def arfx():
         args.op(args.arffile, entries, **opts)
     except Exception, e:
         print >> sys.stderr, "arfx: error: %s" % e
-        raise
+        if isinstance(e, DeprecationWarning):
+            print >> sys.stderr, "      use arfx --upgrade to convert to version %s" % arf.spec_version
         sys.exit(-1)
     return 0
 
