@@ -7,10 +7,10 @@
 #+OPTIONS: ^:nil H:2
 #+STYLE:    <link rel="stylesheet" href="org.css" type="text/css" />
 
-=arfx= is a commandline tool for moving data in and out of ARF containers, using
-a tar-like syntax to specify input and output files. ARF
-(https://github.com/dmeliza/arf) is an open, portable file format for storing
-behavioral and neural data, based on [[http://www.hdfgroup.org/HDF5][HDF5]].
+=arfx= is a commandline tool for copying sampled data in and out of ARF
+containers. The syntax is similar to =tar=. ARF (https://github.com/dmeliza/arf)
+is an open, portable file format for storing behavioral and neural data, based
+on [[http://www.hdfgroup.org/HDF5][HDF5]].
 
 ** requirements
 
@@ -51,9 +51,8 @@ any metadata to be stored in the entry.
 
 *** input files
 
-=arfx= can read sampled data from =wave= files and =pcmseq2= files (a legacy file
-format), and event data from =toelis= and =lbl= files.  Additional file formats
-can be added as plugins (see [[extending arfx]]).
+=arfx= can read sampled data from =pcm=, =wave=, and =pcmseq2= files. Support
+for additional file formats can be added as plugins (see [[extending arfx]]).
 
 When adding data to an ARF container (=-c= and =-r= modes), the input files are
 specified on the command line, and added in the order given. By default, entries
@@ -62,15 +61,6 @@ input file has more than one entry, they are given an additional numerical
 extension. To override this, the =-n= flag can be used to specify the base name;
 all entries are given sequential names based on this.
 
-Input files can be grouped by surrounded them with brackets, e.g. =arfx -cf
-test.arf [file1.wav file2.wav]=. Grouped files are treated as separate channels
-that should be grouped in the same entries. For file types that contain more
-than one entry, the entries of the grouped files are iterated in step. If the
-number of entries in the grouped files doesn't match the tool will use the data
-available and issue a warning. If the name of the entries is not specified using
-the =-n= flag, the entries are named after the first file in the group. The
-channels are named using a simple sequential scheme ('pcm_000', etc).
-
 The =-n, -a, -e, -p, -s, -T= options are used to store information about the
 data being added to the file. The DATATYPE argument can be the numerical code or
 enumeration code (run =arfx --help-datatypes= for a list), and indicates the
@@ -78,20 +68,26 @@ type of data in the entries. All of the entries created in a single run of arfx
 are given these values. The =-u= option tells arfx not to compress the data,
 which can speed up I/O operations slightly.
 
+Currently only one sampled dataset per entry is supported. Clearly this does not
+encompass many use cases, but =arfx= is intended as a simple tool. More
+specialized import procedures can be easily written in Python using the =arf=
+API.
+
 *** output files
 
 The entries to be extracted (in =-x= mode) can be specified by name. If no names
-are specified, all the entries are extracted. The output files will have names
-with the format =entry_channel.ext=, where =ext= is the extension corresponding
-to the data type. arfx outputs sampled data in =wave= format, simple event data
-in =toelis= format, and tabular event data in comma-delimited tables (CSV).
+are specified, all the entries are extracted. All sampled datasets in each entry
+are extracted as separate channels, because they may have different sampling
+rates.  Event datasets are not extracted.
 
-The =-n= argument can be used to customize the names of the output files. The
-argument must be a template in the format defined by the [[http://docs.python.org/library/string.html#format-specification-mini-language][python string module]].
-Supported field names include ``entry'', ``channel'', or ``index'', or they can
-be the name of an HDF5 attribute stored on the entry or channel.
-
-Support for extracting specific channels will be added in the future.
+By default the output files will be in =wave= format and will have names with
+the format =entry_channel.wav=. The =-n= argument can be used to customize the
+names and file format of the output files. The argument must be a template in
+the format defined by the [[http://docs.python.org/library/string.html#format-specification-mini-language][python string module]]. Supported field names include
+=entry=, =channel=, and =index=, as well as the names of any HDF5 attributes
+stored on the entry or channel.  The extension of the output template is used
+to determine the file format.  Currently only =wave= is supported, but
+additional formats may be supplied as plugins (see [[extending arfx]]).
 
 The metadata options are ignored when extracting files; any metadata present in
 the ARF container that is also supported by the target container is copied.
@@ -103,12 +99,15 @@ archive. Each entry/channel is listed on a separate line in path notation.
 
 The =-A= flag is used to copy the contents of one ARF file to another. The
 entries are copied without modification from the source ARF file(s) to the
-target container. Entry IDs are preserved, but grouping information is lost.
+target container.
 
 The =-d= (delete) operation uses the same syntax as the extract operation, but
 instead of extracting the entries, they are deleted. Because of limitations in
 the underlying HDF5 library, this does not free up the space, so the file is
 repacked unless the =-P= option is set.
+
+The =-u= (update) operation can be used to add or update attributes of entries,
+and to rename entries (if the =-n= flag is set).
 
 ** extending arfx
 
@@ -124,11 +123,12 @@ An arfx IO plugin is a class with the following required methods:
      (=w=), or appending (=a=). Must throw an =IOError= if the file does not
      exist or cannot be created, and a =ValueError= if the specified value for
      =mode= is not supported. The additional =attributes= arguments specify
-     metadata to be stored in the file when created. When appropriate, =arfx=
-     will attempt to set =sampling_rate=, =units=, and =datatype= values in
-     files opened for writing.  This method may issue a =ValueError= if the
-     caller fails to set a required attribute, or attempts to set an attribute
-     inconsistent with the data format.
+     metadata to be stored in the file when created. =arfx= will pass all
+     attributes of the channel and entry
+     will attempt to set =channels=, =sampling_rate=, =units=, and =datatype=
+     values in files opened for writing. This method may issue a =ValueError= if
+     the caller fails to set a required attribute, or attempts to set an
+     attribute inconsistent with the data format.
 + read() :: must read the contents of the opened file and return the data in a
             format suitable for storage in an ARF file. Specifically, it must
             be an acceptable type for the =arf.entry.add_data()= method (see
@@ -141,6 +141,8 @@ An arfx IO plugin is a class with the following required methods:
                the epoch, or a two-element sequence giving the number of
                seconds and microseconds since the epoch.  If this property is
                writable it will be set by =arfx= when writing data.
++ sampling_rate :: a property indicating the sampling rate of the data in the
+                   file (or current entry), in units of Hz.
 
 The class may also define the following methods and properties. If any property
 is not defined, it is assumed to have the default value defined below.
@@ -151,25 +153,6 @@ is not defined, it is assumed to have the default value defined below.
            active entry in the file.  Active means that the =read()= and
            =write()= methods will affect only that entry.  Default is 0, and
            =arfx= will not attempt to change the property if =nentries= is 1.
-+ nchannels :: a readable property indicating the number of channels in the
-               current entry. Default value is 1.
-+ channel :: a readable and writable property corresponding to the currently
-             active channel. Default is 0, and =arfx= will not attempt to change
-             the property if =nentries= is 0.
-+ sampling_rate :: a property indicating the sampling rate of the
-                   data. If this property is absent, the data are assumed to be
-                   event times. If the property is writable, =arfx= will set
-                   its value to that of the data it's writing.
-+ units :: a property indicating the units of the measurements, if
-           applicable. If this property is absent for sampled data, it is
-           ignored. If it is absent for event times, it is assumed to be =ms=
-           (milliseconds). If the property is writable, =arfx= will set
-                   its value to that of the data it's writing.
-+ datatype :: a property whose value is an integer code defining the type of
-              data in the file (or current entry). See =arf.DataTypes= or the
-              ARF specification for defined values. Default is
-              =arf.DataTypes.UNDEFINED=. If the property is writable, =arfx=
-              will set its value to that of the data it's writing.
 
 ** project status
 

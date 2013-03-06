@@ -65,24 +65,20 @@ setup(
     url = "https://github.com/dmeliza/arfx",
 
     packages = find_packages(exclude=["*test*"]),
-    ext_modules = [Extension('arfx._pcmseqio',
+    ext_modules = [Extension('arfx.pcmseqio',
                              sources=['src/pcmseqio.c','src/pcmseq.c'], **compiler_settings),
                    Extension('arfx.h5vlen', sources=['src/h5vlen' + SUFFIX], **compiler_settings)],
     cmdclass = {'build_ext': build_ext},
-    entry_points = {'arfx.io': [
-            # '.pcm = arfx.io:pcmfile',
-            '.wav = ewave:wavfile',
-            # '.pcm_seq2 = arfx._pcmseqio:pseqfile',
-            # '.pcm_seq = arfx._pcmseqio:pseqfile',
-            # '.pcmseq2 = arfx._pcmseqio:pseqfile',
-            # '.toe_lis = arfx.io:toefile',
-            # '.toelis = arfx.io:toefile',
-            # '.lbl = arfx.io:lblfile'
-            ],
+    entry_points = {'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
+                                '.wav = ewave:wavfile',
+                                '.pcm_seq2 = arfx.pcmseqio:pseqfile',
+                                '.pcm_seq = arfx.pcmseqio:pseqfile',
+                                '.pcmseq2 = arfx.pcmseqio:pseqfile',
+                                ],
                     'console_scripts': ['arfx = arfx.arfx:arfx'],
                     },
 
-    install_requires = ["distribute","arf>=2.0","ewave>=1.0","toelis>=1.0"],
+    install_requires = ["distribute","arf>=2.0","ewave>=1.0.3","toelis>=1.0"],
     test_suite = 'nose.collector'
     )
 # Variables:
