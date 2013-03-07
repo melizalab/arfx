@@ -118,41 +118,57 @@ corresponding to the extension of the file format handled by the plugin.
 
 An arfx IO plugin is a class with the following required methods:
 
-+ __init__(path, mode, **attributes) :: opens the file at =path=. The =mode=
-     argument specifies whether the file is opened for reading (=r=), writing
-     (=w=), or appending (=a=). Must throw an =IOError= if the file does not
-     exist or cannot be created, and a =ValueError= if the specified value for
-     =mode= is not supported. The additional =attributes= arguments specify
-     metadata to be stored in the file when created. *arfx* will pass all
-     attributes of the channel and entry
-     will attempt to set =channels=, =sampling_rate=, =units=, and =datatype=
-     values in files opened for writing. This method may issue a =ValueError= if
-     the caller fails to set a required attribute, or attempts to set an
-     attribute inconsistent with the data format.
-+ read() :: must read the contents of the opened file and return the data in a
-            format suitable for storage in an ARF file. Specifically, it must
-            be an acceptable type for the =arf.entry.add_data()= method (see
-            https://github.com/dmeliza/arf for documentation).
-+ write(data) :: must write data to the file. Must issue an =IOError= if the
-                 file is opened in the wrong mode, and =TypeError= if the data
-                 format is not correct for the file format.
-+ timestamp :: must be a readable property giving the time point of the data.
-               The value may be a scalar indicating the number of seconds since
-               the epoch, or a two-element sequence giving the number of
-               seconds and microseconds since the epoch.  If this property is
-               writable it will be set by *arfx* when writing data.
-+ sampling_rate :: a property indicating the sampling rate of the data in the
-                   file (or current entry), in units of Hz.
+: __init__(path, mode, **attributes)
+
+Opens the file at =path=. The =mode= argument specifies whether the file is
+opened for reading (=r=), writing (=w=), or appending (=a=). Must throw an
+=IOError= if the file does not exist or cannot be created, and a =ValueError= if
+the specified value for =mode= is not supported. The additional =attributes=
+arguments specify metadata to be stored in the file when created. *arfx* will
+pass all attributes of the channel and entry will attempt to set =channels=,
+=sampling_rate=, =units=, and =datatype= values in files opened for writing.
+This method may issue a =ValueError= if the caller fails to set a required
+attribute, or attempts to set an attribute inconsistent with the data format.
+
+: read()
+
+Reads the contents of the opened file and returns the data in a format suitable
+for storage in an ARF file. Specifically, it must be an acceptable type for the
+=arf.entry.add_data()= method (see https://github.com/dmeliza/arf for
+documentation).
+
+: write(data)
+
+Writes data to the file. Must issue an =IOError= if the file is opened in the
+wrong mode, and =TypeError= if the data format is not correct for the file
+format.
+
+: timestamp
+
+A readable property giving the time point of the data. The value may be a scalar
+indicating the number of seconds since the epoch, or a two-element sequence
+giving the number of seconds and microseconds since the epoch. If this property
+is writable it will be set by *arfx* when writing data.
+
+: sampling_rate
+
+A property indicating the sampling rate of the data in the file (or current
+entry), in units of Hz.
 
 The class may also define the following methods and properties. If any property
 is not defined, it is assumed to have the default value defined below.
 
-+ nentries :: a readable property indicating the number of entries in the file.
-              Default value is 1.
-+ entry :: a readable and writable property corresponding to the currently
-           active entry in the file.  Active means that the =read()= and
-           =write()= methods will affect only that entry.  Default is 0, and
-           *arfx* will not attempt to change the property if =nentries= is 1.
+: nentries
+
+A readable property indicating the number of entries in the file. Default value
+is 1.
+
+: entry
+
+A readable and writable property corresponding to the currently active entry in
+the file. Active means that the =read()= and =write()= methods will affect only
+that entry. Default is 0, and *arfx* will not attempt to change the property if
+=nentries= is 1.
 
 ** version information
 
