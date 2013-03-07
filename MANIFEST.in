@@ -1,0 +1,2 @@
+include README.org COPYING
+recursive-include src *

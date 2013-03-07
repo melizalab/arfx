@@ -25,35 +25,13 @@ import arf
 from . import io
 from tools import filecache
 
-# defaults for user options
-defaults = {
-    'verbose' : False,
-    'entry_base' : None,
-    'datatype' : arf.DataTypes.UNDEFINED,
-    'compress' : 1,
-    'repack' : True,
-    'split_sites' : False,
-    'push_db' : None,
-    'entry_attrs' : {},
-    }
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
 
 
-def get_data_type(a):
-    if a.isdigit():
-        defaults['datatype'] = int(a)
-    else:
-        defaults['datatype'] = arf.DataTypes._fromstring(a)
-        if defaults['datatype'] is None:
-            print >> sys.stderr, "Error: %s is not a valid data type" % a
-            print >> sys.stderr, arf.DataTypes._doc()
-            sys.exit(-1)
-
-
-def parse_name_template(dset, template, index=0, default="NA"):
+def parse_name_template(node, template, index=0, default="NA"):
     """ Generates names for output files using a template and the entry/dataset attributes
 
     see http://docs.python.org/library/string.html#format-specification-mini-language for template formatting
@@ -65,24 +43,37 @@ def parse_name_template(dset, template, index=0, default="NA"):
     index - value to insert for {index} key (usually the index of the entry in the file)
     default - value to replace missing keys with
     """
+    from h5py import Group,Dataset
     import posixpath as pp
     from string import Formatter
     f = Formatter()
     values = dict()
-    entry = dset.parent
+    entry = dset = None
+    if isinstance(node, Group):
+        entry = arf.entry.promote(node)
+    elif isinstance(node, Dataset):
+        dset = node
+        entry = arf.entry.promote(dset.parent)
+
     try:
         for lt,field,fs,c in f.parse(template):
             if field is None:
                 continue
             elif field == "entry":
+                if not entry: raise ValueError, "can't resolve {entry} field for %s" % node
                 values[field] = pp.basename(entry.name)
             elif field == "channel":
+                if not dset: raise ValueError, "can't resolve {channel} field for %s" % node
                 values[field] = pp.basename(dset.name)
             elif field == "index":
                 values[field] = index
-            elif field in dset.attrs:
+            elif dset is not None and hasattr(dset, field):
+                values[field] = getattr(dset, field)
+            elif dset is not None and field in dset.attrs:
                 values[field] = dset.attrs[field]
-            elif field in entry.attrs:
+            elif entry is not None and hasattr(entry, field):
+                values[field] = getattr(entry, field)
+            elif entry is not None and field in entry.attrs:
                 values[field] = entry.attrs[field]
             else:
                 values[field] = default
@@ -91,7 +82,7 @@ def parse_name_template(dset, template, index=0, default="NA"):
         else:
             return template  # no substitutions were made
     except ValueError, e:
-        raise ValueError("Error in template: " + e.message)
+        raise ValueError("template error: " + e.message)
 
 def iter_entries(src, cbase='pcm'):
     """
@@ -316,8 +307,9 @@ def update_entries(src, entries, **options):
     if not os.path.exists(src):
         raise IOError, "the file %s does not exist" % src
     ebase = options.get('template',None)
-    if (entries is None or len(entries)==0) and ebase is not None and ebase.find('%') < 0:
-        ebase += '_%04d'
+    if (entries is None or len(entries)==0) and ebase is not None:
+        if ebase.find('{') < 0:
+            raise ValueError, "with multiple entries, template needs to have {} formatter fields"
     metadata = options.get('attrs', None) or dict()
     if 'datatype' in options:
         metadata['datatype'] = options['datatype']
@@ -331,7 +323,7 @@ def update_entries(src, entries, **options):
                     print enode.__str__()
                     print "**********"
                 if ebase:
-                    name = ebase % i
+                    name = parse_name_template(enode, ebase, index=i)
                     arfp.h5[name] = enode
                     del arfp.h5[entry] # entry object should remain valid
                 arfp.set_attributes(enode, **metadata)
@@ -378,6 +370,14 @@ class ParseKeyVal(argparse.Action):
             kv[key] = val
         setattr(namespace, self.dest, kv)
 
+class ParseDataType(argparse.Action):
+    def __call__(self, parser, namespace, arg, option_string=None):
+        if not arg.isdigit():
+            arg = arf.DataTypes._fromstring(arg)
+            if arg is None:
+                raise ValueError, "%s is not a valid data type" % arg
+        setattr(namespace, self.dest, int(arg))
+
 
 def arfx():
 
@@ -414,7 +414,7 @@ def arfx():
     g.add_argument('-n',help='name entries or files using %(metavar)s',
                    metavar='TEMPLATE',dest='template')
     g.add_argument('-T',help='specify data type (see --help-datatypes)',
-                   default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype')
+                   default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype', action=ParseDataType)
     g.add_argument('-k',help='specify attributes of entries', action=ParseKeyVal,
                    metavar="KEY=VALUE", dest='attrs')
     g.add_argument('-P',help="don't repack when deleting entries", action='store_false',

@@ -17,7 +17,7 @@ on [[http://www.hdfgroup.org/HDF5][HDF5]].
 + Python >= 2.6
 + arf >= 2.0 (https://github.com/dmeliza/arf)
 + toelis >= 1.0 (https://github.com/dmeliza/toelis)
-+ ewave >= 1.0.2 (https://github.com/dmeliza/ewave)
++ ewave >= 1.0.3 (https://github.com/dmeliza/ewave)
 
 ** installation
 
@@ -154,7 +154,8 @@ is not defined, it is assumed to have the default value defined below.
            =write()= methods will affect only that entry.  Default is 0, and
            =arfx= will not attempt to change the property if =nentries= is 1.
 
-** project status
+** version information
 
-=arfx= is currently in pre-release alpha. It will be finalized when the
-specification for ARF version 2.0 is frozen.
+=arfx= uses semantic versioning and is synchronized with the major/minor version
+numbers of the ARF specification. It is currently in pre-release alpha. It will
+be finalized when the specification for ARF version 2.0 is frozen.
