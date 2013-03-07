@@ -7,7 +7,7 @@
 #+OPTIONS: ^:nil H:2
 #+STYLE:    <link rel="stylesheet" href="org.css" type="text/css" />
 
-=arfx= is a commandline tool for copying sampled data in and out of ARF
+*arfx* is a commandline tool for copying sampled data in and out of ARF
 containers. The syntax is similar to =tar=. ARF (https://github.com/dmeliza/arf)
 is an open, portable file format for storing behavioral and neural data, based
 on [[http://www.hdfgroup.org/HDF5][HDF5]].
@@ -17,7 +17,7 @@ on [[http://www.hdfgroup.org/HDF5][HDF5]].
 + Python >= 2.6
 + arf >= 2.0 (https://github.com/dmeliza/arf)
 + toelis >= 1.0 (https://github.com/dmeliza/toelis)
-+ ewave >= 1.0.3 (https://github.com/dmeliza/ewave)
++ ewave >= 1.0.3 (https://github.com/dmeliza/py-ewave)
 
 ** installation
 
@@ -51,7 +51,7 @@ any metadata to be stored in the entry.
 
 *** input files
 
-=arfx= can read sampled data from =pcm=, =wave=, and =pcmseq2= files. Support
+*arfx* can read sampled data from =pcm=, =wave=, and =pcmseq2= files. Support
 for additional file formats can be added as plugins (see [[extending arfx]]).
 
 When adding data to an ARF container (=-c= and =-r= modes), the input files are
@@ -69,7 +69,7 @@ are given these values. The =-u= option tells arfx not to compress the data,
 which can speed up I/O operations slightly.
 
 Currently only one sampled dataset per entry is supported. Clearly this does not
-encompass many use cases, but =arfx= is intended as a simple tool. More
+encompass many use cases, but *arfx* is intended as a simple tool. More
 specialized import procedures can be easily written in Python using the =arf=
 API.
 
@@ -123,7 +123,7 @@ An arfx IO plugin is a class with the following required methods:
      (=w=), or appending (=a=). Must throw an =IOError= if the file does not
      exist or cannot be created, and a =ValueError= if the specified value for
      =mode= is not supported. The additional =attributes= arguments specify
-     metadata to be stored in the file when created. =arfx= will pass all
+     metadata to be stored in the file when created. *arfx* will pass all
      attributes of the channel and entry
      will attempt to set =channels=, =sampling_rate=, =units=, and =datatype=
      values in files opened for writing. This method may issue a =ValueError= if
@@ -140,7 +140,7 @@ An arfx IO plugin is a class with the following required methods:
                The value may be a scalar indicating the number of seconds since
                the epoch, or a two-element sequence giving the number of
                seconds and microseconds since the epoch.  If this property is
-               writable it will be set by =arfx= when writing data.
+               writable it will be set by *arfx* when writing data.
 + sampling_rate :: a property indicating the sampling rate of the data in the
                    file (or current entry), in units of Hz.
 
@@ -152,10 +152,10 @@ is not defined, it is assumed to have the default value defined below.
 + entry :: a readable and writable property corresponding to the currently
            active entry in the file.  Active means that the =read()= and
            =write()= methods will affect only that entry.  Default is 0, and
-           =arfx= will not attempt to change the property if =nentries= is 1.
+           *arfx* will not attempt to change the property if =nentries= is 1.
 
 ** version information
 
-=arfx= uses semantic versioning and is synchronized with the major/minor version
+*arfx* uses semantic versioning and is synchronized with the major/minor version
 numbers of the ARF specification. It is currently in pre-release alpha. It will
 be finalized when the specification for ARF version 2.0 is frozen.
