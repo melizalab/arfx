@@ -14,6 +14,8 @@ except ImportError:
 import os,sys
 import numpy
 
+sysver = sys.version_info
+
 # --- Distutils setup and metadata --------------------------------------------
 
 VERSION = '2.0.0-beta1'
@@ -52,6 +54,9 @@ compiler_settings = {
 if sys.platform=='darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
+requirements = ["distribute","arf>=2.0.0_beta1","ewave>=1.0.3","toelis>=1.0"],
+if sysver.major == 2 and sysver.minor < 7:
+    requirements.append("argparse")
 
 setup(
     name = 'arfx',
@@ -79,7 +84,7 @@ setup(
                     'console_scripts': ['arfx = arfx.arfx:arfx'],
                     },
 
-    install_requires = ["distribute","argparse","arf>=2.0.0_beta1","ewave>=1.0.3","toelis>=1.0"],
+    install_requires = requirements,
     test_suite = 'nose.collector'
     )
 # Variables:
