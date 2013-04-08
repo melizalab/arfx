@@ -16,7 +16,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.0.0-alpha'
+VERSION = '2.0.0-beta1'
 
 cls_txt = \
 """
