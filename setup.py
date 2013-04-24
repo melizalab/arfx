@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
+import sys
+if sys.hexversion < 0x02060000:
+    raise RuntimeError, "Python 2.6 or higher required"
+
 from distribute_setup import use_setuptools
 use_setuptools()
 from setuptools import setup, find_packages, Extension
@@ -14,11 +18,9 @@ except ImportError:
 import os,sys
 import numpy
 
-sysver = sys.version_info
-
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.0.0-beta1'
+VERSION = '2.0.0'
 
 cls_txt = \
 """
@@ -45,6 +47,7 @@ rational, hierarchical format. Data are organized around the concept of an
 entry, which is a set of data channels that all start at the same time.
 
 Includes a commandline tool for importing and exporting data from ARF files.
+
 """
 
 compiler_settings = {
@@ -54,8 +57,8 @@ compiler_settings = {
 if sys.platform=='darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["distribute","arf>=2.0.0_beta1","ewave>=1.0.3","toelis>=1.0"]
-if not hasattr(sysver,'major') or sysver.major == 2 and sysver.minor < 7:
+requirements = ["distribute","arf>=2.0.0","ewave>=1.0.3","toelis>=1.0"]
+if sys.hexversion < 0x02070000:
     requirements.append("argparse")
 
 setup(
