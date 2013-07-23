@@ -20,7 +20,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 
 cls_txt = \
 """
@@ -57,9 +57,9 @@ compiler_settings = {
 if sys.platform=='darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["distribute","arf>=2.0.0","ewave>=1.0.3","toelis>=1.0"]
+requirements = ["arf==2.0.0","ewave==1.0.3","toelis==1.0.0"]
 if sys.hexversion < 0x02070000:
-    requirements.append("argparse")
+    requirements.append("argparse==1.2.1")
 
 setup(
     name = 'arfx',
@@ -84,7 +84,8 @@ setup(
                                 '.pcm_seq = arfx.pcmseqio:pseqfile',
                                 '.pcmseq2 = arfx.pcmseqio:pseqfile',
                                 ],
-                    'console_scripts': ['arfx = arfx.arfx:arfx'],
+                    'console_scripts': ['arfx = arfx.arfx:arfx',
+                                        'arfxplog = arfx.arfxplog:arfxplog'],
                     },
 
     install_requires = requirements,
