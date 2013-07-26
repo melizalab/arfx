@@ -20,7 +20,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.0.1'
+VERSION = '2.1.0'
 
 cls_txt = \
     """
@@ -46,8 +46,6 @@ files are HDF5 files used to store audio and neurophysiological recordings in a
 rational, hierarchical format. Data are organized around the concept of an
 entry, which is a set of data channels that all start at the same time.
 
-Includes a commandline tool for importing and exporting data from ARF files.
-
 """
 
 compiler_settings = {
@@ -57,7 +55,7 @@ compiler_settings = {
 if sys.platform == 'darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["arf==2.0.0", "ewave==1.0.3", "toelis==1.0.0"]
+requirements = ["arf==2.1.0", "ewave==1.0.3", "toelis==1.0.0"]
 if sys.hexversion < 0x02070000:
     requirements.append("argparse==1.2.1")
 

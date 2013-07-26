@@ -32,6 +32,33 @@ default_extract_template = "{entry}_{channel}.wav"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
 
+    # def __str__(self):
+    #     attrs = self.attrs
+    #     datatypes = DataTypes._todict()
+    #     out = "%s" % (self.name)
+    #     for k, v in attrs.items():
+    #         if k.isupper(): continue
+    #         if k == 'timestamp':
+    #             out += "\n  timestamp : %s" % datetime_timestamp(v).strftime("%Y-%m-%d %H:%M:%S.%f")
+    #         elif k == 'uuid':
+    #             out += "\n  uuid : %s" % self.uuid
+    #         else:
+    #             out += "\n  %s : %s" % (k, v)
+    #     for name, dset in self.iteritems():
+    #         out += "\n  /%s :" % name
+    #         if isinstance(dset.id.get_type(), hp.h5t.TypeVlenID):
+    #             out += " vlarray"
+    #         else:
+    #             out += " array %s" % (dset.shape,)
+    #             if 'sampling_rate' in dset.attrs:
+    #                 out += " @ %.1f/s" % dset.attrs['sampling_rate']
+    #             if dset.dtype.names is not None:
+    #                 out += " (compound type)"
+
+    #         out += ", type %s"  % datatypes[dset.attrs.get('datatype', DataTypes.UNDEFINED)]
+    #         if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
+    #     return out
+
 
 def parse_name_template(node, template, index=0, default="NA"):
     """ Generates names for output files using a template and the entry/dataset attributes
