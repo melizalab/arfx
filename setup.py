@@ -23,7 +23,7 @@ import numpy
 VERSION = '2.0.1'
 
 cls_txt = \
-"""
+    """
 Development Status :: 5 - Production/Stable
 Intended Audience :: Science/Research
 License :: OSI Approved :: GNU General Public License (GPL)
@@ -40,7 +40,7 @@ Natural Language :: English
 short_desc = "Advanced Recording Format Tools"
 
 long_desc = \
-"""
+    """
 Commandline tools for reading and writing Advanced Recording Format files. ARF
 files are HDF5 files used to store audio and neurophysiological recordings in a
 rational, hierarchical format. Data are organized around the concept of an
@@ -51,45 +51,47 @@ Includes a commandline tool for importing and exporting data from ARF files.
 """
 
 compiler_settings = {
-    'libraries' : ['hdf5'],
-    'include_dirs' : [numpy.get_include()],
-    }
-if sys.platform=='darwin':
+    'libraries': ['hdf5'],
+    'include_dirs': [numpy.get_include()],
+}
+if sys.platform == 'darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["arf==2.0.0","ewave==1.0.3","toelis==1.0.0"]
+requirements = ["arf==2.0.0", "ewave==1.0.3", "toelis==1.0.0"]
 if sys.hexversion < 0x02070000:
     requirements.append("argparse==1.2.1")
 
 setup(
-    name = 'arfx',
-    version = VERSION,
-    description = short_desc,
-    long_description = long_desc,
-    classifiers = [x for x in cls_txt.split("\n") if x],
-    author = 'Dan Meliza',
-    author_email = '"dan" at the domain "meliza.org"',
-    maintainer = 'Dan Meliza',
-    maintainer_email = '"dan" at the domain "meliza.org"',
-    url = "https://github.com/dmeliza/arfx",
+    name='arfx',
+    version=VERSION,
+    description=short_desc,
+    long_description=long_desc,
+    classifiers=[x for x in cls_txt.split("\n") if x],
+    author='Dan Meliza',
+    author_email='"dan" at the domain "meliza.org"',
+    maintainer='Dan Meliza',
+    maintainer_email='"dan" at the domain "meliza.org"',
+    url="https://github.com/dmeliza/arfx",
 
-    packages = find_packages(exclude=["*test*"]),
-    ext_modules = [Extension('arfx.pcmseqio',
-                             sources=['src/pcmseqio.c','src/pcmseq.c'], **compiler_settings),
-                   Extension('arfx.h5vlen', sources=['src/h5vlen' + SUFFIX], **compiler_settings)],
-    cmdclass = {'build_ext': build_ext},
-    entry_points = {'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
-                                '.wav = ewave:wavfile',
-                                '.pcm_seq2 = arfx.pcmseqio:pseqfile',
-                                '.pcm_seq = arfx.pcmseqio:pseqfile',
-                                '.pcmseq2 = arfx.pcmseqio:pseqfile',
-                                ],
-                    'console_scripts': ['arfx = arfx.arfx:arfx',
-                                        'arfxplog = arfx.arfxplog:arfxplog'],
-                    },
+    packages=find_packages(exclude=["*test*"]),
+    ext_modules=[Extension('arfx.pcmseqio',
+                           sources=[
+                           'src/pcmseqio.c', 'src/pcmseq.c'], **compiler_settings),
+        Extension(
+            'arfx.h5vlen', sources=['src/h5vlen' + SUFFIX], **compiler_settings)],
+    cmdclass={'build_ext': build_ext},
+    entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
+                              '.wav = ewave:wavfile',
+                              '.pcm_seq2 = arfx.pcmseqio:pseqfile',
+                              '.pcm_seq = arfx.pcmseqio:pseqfile',
+                              '.pcmseq2 = arfx.pcmseqio:pseqfile',
+                              ],
+                  'console_scripts': ['arfx = arfx.arfx:arfx',
+                                      'arfxplog = arfx.arfxplog:arfxplog'],
+                  },
 
-    install_requires = requirements,
-    test_suite = 'nose.collector'
-    )
+    install_requires=requirements,
+    test_suite='nose.collector'
+)
 # Variables:
 # End:

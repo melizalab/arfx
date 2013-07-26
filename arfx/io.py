@@ -48,7 +48,8 @@ def open(filename, *args, **kwargs):
     from os.path import splitext
     ext = splitext(filename)[1].lower()
     subclass = _handlers.get(ext, None)
-    if subclass is None: raise TypeError, "No handler defined for files of type %s" % ext
+    if subclass is None:
+        raise TypeError, "No handler defined for files of type %s" % ext
     return subclass(filename, *args, **kwargs)
 
 # Variables:

@@ -8,7 +8,9 @@ Created 2012-03-29
 """
 from ewave import rescale
 
+
 class pcmfile(object):
+
     def __init__(self, f, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
         """ Open a file for reading and/or writing. Any of the standard modes
         supported by file can be used.
@@ -33,9 +35,9 @@ class pcmfile(object):
             raise ValueError, "More than one channel not supported by this format"
 
         if isinstance(f, basestring):
-            if mode not in ('r','r+','w','w+'):
+            if mode not in ('r', 'r+', 'w', 'w+'):
                 raise ValueError, "Invalid mode (use 'r', 'r+', 'w', 'w+')"
-            self.fp = file(f, mode=mode+'b')
+            self.fp = file(f, mode=mode + 'b')
         else:
             self.fp = f
 
@@ -45,7 +47,6 @@ class pcmfile(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.flush()
         return exc_val
-
 
     @property
     def filename(self):
@@ -70,9 +71,9 @@ class pcmfile(object):
     def nframes(self):
         # not sure how this will behave with memmap
         pos = self.fp.tell()
-        self.fp.seek(0,2)
+        self.fp.seek(0, 2)
         nbytes = self.fp.tell()
-        self.fp.seek(pos,0)
+        self.fp.seek(pos, 0)
         return nbytes // (self.dtype.itemsize * self.nchannels)
 
     @property
@@ -91,7 +92,7 @@ class pcmfile(object):
 
     def flush(self):
         """ flush data to disk """
-        if hasattr(self,'fp') and not self.fp.closed:
+        if hasattr(self, 'fp') and not self.fp.closed:
             self.fp.flush()
         return self
 
@@ -110,17 +111,21 @@ class pcmfile(object):
         """
         from numpy import memmap as mmap
         from numpy import fromfile
-        if self.mode == 'w': raise IOError, 'file is write-only'
-        if self.mode == 'r+': self.fp.flush()
+        if self.mode == 'w':
+            raise IOError, 'file is write-only'
+        if self.mode == 'r+':
+            self.fp.flush()
         # find offset
-        if frames is None: frames = self.nframes - offset
+        if frames is None:
+            frames = self.nframes - offset
         if memmap:
             A = mmap(self.fp, offset=offset, dtype=self._dtype, mode=memmap,
-                     shape=frames*self.nchannels)
+                     shape=frames * self.nchannels)
         else:
             pos = self.fp.tell()
             self.fp.seek(offset)
-            A = fromfile(self.fp, dtype=self._dtype, count=frames*self.nchannels)
+            A = fromfile(
+                self.fp, dtype=self._dtype, count=frames * self.nchannels)
             self.fp.seek(pos)
 
         if self.nchannels > 1:
@@ -141,7 +146,8 @@ class pcmfile(object):
                     used, which can result in clipping.
         """
         from numpy import asarray
-        if self.mode=='r': raise IOError, 'file is read-only'
+        if self.mode == 'r':
+            raise IOError, 'file is read-only'
 
         if not scale:
             data = asarray(data, self._dtype)
