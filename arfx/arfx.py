@@ -17,7 +17,7 @@ Scripts
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
 
-__version__ = "2.0.1"
+__version__ = "2.1.0"
 
 import os
 import sys
@@ -32,32 +32,33 @@ default_extract_template = "{entry}_{channel}.wav"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
 
-    # def __str__(self):
-    #     attrs = self.attrs
-    #     datatypes = DataTypes._todict()
-    #     out = "%s" % (self.name)
-    #     for k, v in attrs.items():
-    #         if k.isupper(): continue
-    #         if k == 'timestamp':
-    #             out += "\n  timestamp : %s" % datetime_timestamp(v).strftime("%Y-%m-%d %H:%M:%S.%f")
-    #         elif k == 'uuid':
-    #             out += "\n  uuid : %s" % self.uuid
-    #         else:
-    #             out += "\n  %s : %s" % (k, v)
-    #     for name, dset in self.iteritems():
-    #         out += "\n  /%s :" % name
-    #         if isinstance(dset.id.get_type(), hp.h5t.TypeVlenID):
-    #             out += " vlarray"
-    #         else:
-    #             out += " array %s" % (dset.shape,)
-    #             if 'sampling_rate' in dset.attrs:
-    #                 out += " @ %.1f/s" % dset.attrs['sampling_rate']
-    #             if dset.dtype.names is not None:
-    #                 out += " (compound type)"
+def entry_repr(entry):
+    from h5py import h5t
+    attrs = entry.attrs
+    datatypes = arf.DataTypes._todict()
+    out = "%s" % (entry.name)
+    for k, v in attrs.items():
+        if k.isupper(): continue
+        if k == 'timestamp':
+            out += "\n  timestamp : %s" % arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f")
+        elif k == 'uuid':
+            out += "\n  uuid : %s" % arf.get_uuid(entry)
+        else:
+            out += "\n  %s : %s" % (k, v)
+    for name, dset in entry.iteritems():
+        out += "\n  /%s :" % name
+        if isinstance(dset.id.get_type(), h5t.TypeVlenID):
+            out += " vlarray"
+        else:
+            out += " array %s" % (dset.shape,)
+            if 'sampling_rate' in dset.attrs:
+                out += " @ %.1f/s" % dset.attrs['sampling_rate']
+            if dset.dtype.names is not None:
+                out += " (compound type)"
 
-    #         out += ", type %s"  % datatypes[dset.attrs.get('datatype', DataTypes.UNDEFINED)]
-    #         if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
-    #     return out
+        out += ", type %s"  % datatypes[dset.attrs.get('datatype', arf.DataTypes.UNDEFINED)]
+        if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
+    return out
 
 
 def parse_name_template(node, template, index=0, default="NA"):
@@ -79,10 +80,10 @@ def parse_name_template(node, template, index=0, default="NA"):
     values = dict()
     entry = dset = None
     if isinstance(node, Group):
-        entry = arf.entry.promote(node)
+        entry = node
     elif isinstance(node, Dataset):
         dset = node
-        entry = arf.entry.promote(dset.parent)
+        entry = dset.parent
 
     try:
         for lt, field, fs, c in f.parse(template):
@@ -117,8 +118,8 @@ def parse_name_template(node, template, index=0, default="NA"):
 
 
 def iter_entries(src, cbase='pcm'):
-    """
-    Iterate through the entries and channels of a data source.
+    """Iterate through the entries and channels of a data source.
+
     Yields (data, entry index, entry name,)
     """
     fp = io.open(src, 'r')
@@ -147,6 +148,7 @@ def add_entries(tgt, files, **options):
     Additional keyword arguments specify metadata on the newly created
     entries.
     """
+    from h5py import Group
     compress = options.get('compress', None)
     ebase = options.get('template', None)
     metadata = options.get('attrs', None) or dict()
@@ -156,7 +158,8 @@ def add_entries(tgt, files, **options):
     if len(files) == 0:
         raise ValueError, "must specify one or more input files"
 
-    with arf.file(tgt, 'a', strict_version=True) as arfp:
+    with arf.open_file(tgt, 'a') as arfp:
+        arf.check_file_version(arfp)
         for f in files:
             try:
                 for fp, entry_index, entry_name in iter_entries(f):
@@ -166,24 +169,23 @@ def add_entries(tgt, files, **options):
                         if hasattr(fp, 'fp') and hasattr(fp.fp, 'fileno'):
                             timestamp = os.fstat(fp.fp.fileno()).st_mtime
                         else:
-                            raise ValueError, "%s/%d missing required timestamp" % (
-                                f, entry_index)
+                            raise ValueError("%s/%d missing required timestamp" %
+                                             (f, entry_index))
                     if not hasattr(fp, 'sampling_rate'):
-                        raise ValueError, "%s/%d missing required sampling_rate attribute" % (
-                            f, entry_index)
+                        raise ValueError("%s/%d missing required sampling_rate attribute" %
+                                         (f, entry_index))
 
                     if ebase is not None:
                         entry_name = default_entry_template.format(
-                            base=ebase, index=arfp.nentries)
-                    entry = arfp.create_entry(
-                        entry_name, timestamp, **metadata)
-
-                    entry.add_data(chan, fp.read(),
-                                   datatype=datatype,
-                                   sampling_rate=fp.sampling_rate,
-                                   compression=compress,
-                                   source_file=f,
-                                   source_entry=entry_index)
+                            base=ebase,
+                            index=arf.count_children(arfp, Group))
+                    entry = arf.create_entry(arfp, entry_name, timestamp, **metadata)
+                    arf.create_dataset(entry, chan, fp.read(),
+                                       datatype=datatype,
+                                       sampling_rate=fp.sampling_rate,
+                                       compression=compress,
+                                       source_file=f,
+                                       source_entry=entry_index)
                     if options['verbose']:
                         print "%s/%d -> /%s/%s" % (f, entry_index, entry_name, chan)
             except Exception, e:
@@ -214,8 +216,10 @@ def extract_entries(src, entries, **options):
         entries = None
     ebase = options.get('template', None)
 
-    with arf.file(src, 'r', strict_version=True) as arfp:
-        for index, (ename, entry) in enumerate(arfp.items(key='timestamp')):
+    with arf.open_file(src, 'r') as arfp:
+        arf.check_file_version(arfp)
+        for index, ename in enumerate(arf.keys_by_creation(arfp)):
+            entry = arfp[ename]
             attrs = dict(entry.attrs)
             if entries is None or ename in entries:
                 for channel in entry:
@@ -227,9 +231,10 @@ def extract_entries(src, entries, **options):
                     fname = parse_name_template(dset,
                                                 ebase or default_extract_template,
                                                 index=index)
-                    fp = io.open(fname, 'w', **attrs)
-                                 # will throw error for unsupported format
-
+                    try:
+                        fp = io.open(fname, 'w', **attrs)
+                    except TypeError as e:
+                        raise IOError("can't write to file '%s' - %s" % (fname, e))
                     dtype, stype, ncols = arf.dataset_properties(dset)
                     if dtype != 'sampled':
                         continue
@@ -257,7 +262,8 @@ def delete_entries(src, entries, **options):
     if entries is None or len(entries) == 0:
         return
 
-    with arf.file(src, 'r+', strict_version=True) as arfp:
+    with arf.open_file(src, 'r+') as arfp:
+        arf.check_file_version(arfp)
         count = 0
         for entry in entries:
             if entry in arfp:
@@ -282,10 +288,12 @@ def copy_entries(tgt, files, **options):
 
     entry_base: if specified, rename entries sequentially in target file
     """
+    from h5py import Group
     ebase = options.get('template', None)
-    acache = filecache(arf.file)
+    acache = filecache(arf.open_file)
 
-    with arf.file(tgt, 'a', strict_version=True) as arfp:
+    with arf.open_file(tgt, 'a') as arfp:
+        arf.check_file_version(arfp)
         for f in files:
             # this is a bit tricky:
             # file.arf is a file; file.arf/entry is entry
@@ -309,10 +317,10 @@ def copy_entries(tgt, files, **options):
                 try:
                     if ebase is not None:
                         entry_name = default_entry_template.format(
-                            base=ebase, index=arfp.nentries)
+                            base=ebase, index=arf.count_children(arfp, Group))
                     else:
                         entry_name = posixpath.basename(entry.name)
-                    arfp.h5.copy(entry, arfp.h5, name=entry_name)
+                    arfp.copy(entry, arfp, name=entry_name)
                     if options['verbose']:
                         print "%s%s -> %s/%s" % (fname, entry.name, tgt, entry_name)
                 except Exception, e:
@@ -331,18 +339,24 @@ def list_entries(src, entries, **options):
     if not os.path.exists(src):
         raise IOError, "the file %s does not exist" % src
     print "%s:" % src
-    with arf.file(src, 'r', strict_version=True) as arfp:
+    with arf.open_file(src, 'r') as arfp:
+        arf.check_file_version(arfp)
         if entries is None or len(entries) == 0:
-            for name, entry in arfp.items(key='timestamp'):
+            try:
+                it = arf.keys_by_creation(arfp)
+            except RuntimeError:
+                it = iter(arfp)
+            for name in it:
+                entry = arfp[name]
                 if options.get('verbose', False):
-                    print entry
+                    print entry_repr(entry)
                 else:
-                    print "%s: %d channel%s" % (entry.name, entry.nchannels,
-                                                arf.pluralize(entry.nchannels))
+                    print "%s: %d channel%s" % (entry.name, len(entry),
+                                                arf.pluralize(len(entry)))
         else:
             for ename in entries:
                 if ename in arfp:
-                    print arfp[ename]
+                    print entry_repr(arfp[ename])
 
 
 def update_entries(src, entries, **options):
@@ -362,21 +376,22 @@ def update_entries(src, entries, **options):
     if 'datatype' in options:
         metadata['datatype'] = options['datatype']
 
-    with arf.file(src, 'r+', strict_version=True) as arfp:
+    with arf.open_file(src, 'r+') as arfp:
+        arf.check_file_version(arfp)
         for i, entry in enumerate(arfp):
             if entries is None or len(entries) == 0 or posixpath.relpath(entry) in entries:
                 enode = arfp[entry]
                 if options.get('verbose', False):
                     print "vvvvvvvvvv"
-                    print enode.__str__()
+                    print entry_repr(enode)
                     print "**********"
                 if ebase:
                     name = parse_name_template(enode, ebase, index=i)
-                    arfp.h5[name] = enode
-                    del arfp.h5[entry]  # entry object should remain valid
-                arfp.set_attributes(enode, **metadata)
+                    arfp[name] = enode
+                    del arfp[entry]  # entry object should remain valid
+                arf.set_attributes(enode, **metadata)
                 if options.get('verbose', False):
-                    print enode.__str__()
+                    print entry_repr(enode)
                     print "^^^^^^^^^^"
 
 
@@ -435,14 +450,13 @@ class ParseDataType(argparse.Action):
 
 def arfx():
 
-    p = argparse.ArgumentParser(
-        description='copy data in and out of ARF files')
+    p = argparse.ArgumentParser(description='copy data in and out of ARF files')
     p.add_argument('entries', nargs='*')
     p.add_argument('--version', action='version',
                    version='%(prog)s ' + __version__)
-    p.add_argument(
-        '--help-datatypes', help='print available datatypes and exit',
-        action='version', version=arf.DataTypes._doc())
+    p.add_argument('--help-datatypes',
+                   help='print available datatypes and exit',
+                   action='version', version=arf.DataTypes._doc())
 
     # operations
     pp = p.add_argument_group('Operations')
@@ -461,9 +475,8 @@ def arfx():
                    action='store_const', dest='op', const=update_entries)
     g.add_argument('-d', help='delete entries',
                    action='store_const', dest='op', const=delete_entries)
-    g.add_argument(
-        '--upgrade', help="migrate older ARF versions to %s" % __version__,
-        action='store_const', dest='op', const=upgrade_file)
+    g.add_argument('--upgrade', help="migrate older ARF versions to %s" % __version__,
+                   action='store_const', dest='op', const=upgrade_file)
 
     g = p.add_argument_group('Options')
     g.add_argument('-f', help='the ARF file to operate on', required=True,
@@ -474,14 +487,11 @@ def arfx():
                    metavar='TEMPLATE', dest='template')
     g.add_argument('-T', help='specify data type (see --help-datatypes)',
                    default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype', action=ParseDataType)
-    g.add_argument(
-        '-k', help='specify attributes of entries', action=ParseKeyVal,
+    g.add_argument('-k', help='specify attributes of entries', action=ParseKeyVal,
                    metavar="KEY=VALUE", dest='attrs')
-    g.add_argument(
-        '-P', help="don't repack when deleting entries", action='store_false',
+    g.add_argument('-P', help="don't repack when deleting entries", action='store_false',
                    dest='repack')
-    g.add_argument(
-        '-z', help="set compression level in ARF (default: %(default)s)", type=int,
+    g.add_argument('-z', help="set compression level in ARF (default: %(default)s)", type=int,
                    default=1, dest='compress')
 
     args = p.parse_args()

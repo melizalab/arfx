@@ -5,7 +5,7 @@ import sys
 if sys.hexversion < 0x02060000:
     raise RuntimeError, "Python 2.6 or higher required"
 
-from distribute_setup import use_setuptools
+from ez_setup import use_setuptools
 use_setuptools()
 from setuptools import setup, find_packages, Extension
 try:
@@ -22,8 +22,7 @@ import numpy
 
 VERSION = '2.1.0'
 
-cls_txt = \
-    """
+cls_txt = """
 Development Status :: 5 - Production/Stable
 Intended Audience :: Science/Research
 License :: OSI Approved :: GNU General Public License (GPL)
@@ -39,11 +38,9 @@ Natural Language :: English
 
 short_desc = "Advanced Recording Format Tools"
 
-long_desc = \
-    """
-Commandline tools for reading and writing Advanced Recording Format files. ARF
-files are HDF5 files used to store audio and neurophysiological recordings in a
-rational, hierarchical format. Data are organized around the concept of an
+long_desc = """Commandline tools for reading and writing Advanced Recording Format files.
+ARF files are HDF5 files used to store audio and neurophysiological recordings
+in a rational, hierarchical format. Data are organized around the concept of an
 entry, which is a set of data channels that all start at the same time.
 
 """

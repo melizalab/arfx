@@ -168,7 +168,7 @@ def cvt_11_20(afp, **kwargs):
         print "** Upgrading attributes for", ename
         if "uuid" not in entry.attrs:
             print "*** Adding uuid"
-            arf.set_uuid_attr(entry)
+            arf.set_uuid(entry)
         for k in entry.attrs:
             if k in pyt_attr_names:
                 del entry.attrs[k]
