@@ -15,12 +15,12 @@ except ImportError:
     from distutils.command.build_ext import build_ext
     SUFFIX = '.c'
 
-import os,sys
+import sys
 import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.1.0'
+VERSION = '2.0.1'
 
 cls_txt = \
 """

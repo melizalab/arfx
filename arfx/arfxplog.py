@@ -12,6 +12,7 @@ import numpy as nx
 
 import arf
 from . import io
+from arfx import __version__
 
 defaults = {
     'verbose' : False,
@@ -27,6 +28,16 @@ defaults = {
 default_extract_template = "{entry}_{channel}"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
+
+def get_data_type(a):
+    if a.isdigit():
+        defaults['datatype'] = int(a)
+    else:
+        defaults['datatype'] = getattr(arf.DataTypes,a.upper(),None)
+        if defaults['datatype'] is None:
+            print >> sys.stderr, "Error: %s is not a valid data type" % a
+            print >> sys.stderr, arf.DataTypes._doc()
+            sys.exit(-1)
 
 class arfgroup(object):
     """
@@ -328,7 +339,7 @@ def arfxplog():
             print arfxplog.__doc__
             sys.exit(0)
         elif o == '--version':
-            print "%s version: %s" % (os.path.basename(sys.argv[0]), arf.version.version)
+            print "%s version: %s" % (os.path.basename(sys.argv[0]), __version__)
             sys.exit(0)
         elif o == '--help-datatypes':
             print arf.DataTypes._doc()

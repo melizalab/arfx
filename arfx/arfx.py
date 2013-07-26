@@ -17,7 +17,7 @@ Scripts
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 import os, sys, posixpath
 import argparse
