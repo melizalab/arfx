@@ -2,7 +2,7 @@
 /arfx.egg-info/
 /dist/
 /test/
-/distribute-*
+/setuptools-*
 *.pyc
 *.so
 *.arf

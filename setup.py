@@ -5,9 +5,15 @@ import sys
 if sys.hexversion < 0x02060000:
     raise RuntimeError, "Python 2.6 or higher required"
 
-from ez_setup import use_setuptools
-use_setuptools()
-from setuptools import setup, find_packages, Extension
+# setuptools 0.7+ doesn't play nice with distribute, so try to use existing
+# package if possible
+try:
+    from setuptools import setup, find_packages, Extension
+except ImportError:
+    from ez_setup import use_setuptools
+    use_setuptools()
+    from setuptools import setup, find_packages, Extension
+
 try:
     from Cython.Distutils import build_ext
     SUFFIX = '.pyx'
@@ -52,7 +58,7 @@ compiler_settings = {
 if sys.platform == 'darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["arf==2.1.0", "ewave==1.0.3", "toelis==1.0.0"]
+requirements = ["arf==2.1.0", "ewave==1.0.3"]
 if sys.hexversion < 0x02070000:
     requirements.append("argparse==1.2.1")
 
