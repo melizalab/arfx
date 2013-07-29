@@ -56,14 +56,9 @@ class arfgroup(object):
 
         Additional options
         ------------------
-        db_uri:        specify alternate location of the entry database
         split_sites:   split data for each site into multiple files (default False)
-        open_mode:     mode string to open new files with (default 'w')
         """
         self.basename = basename
-        self.open_mode = options.get('open_mode', 'w')
-        self.factory = lambda x: arf.file(x, mode=self.open_mode)
-
         if options.get('split_sites', False):
             self.handles = {}
         else:
@@ -71,8 +66,8 @@ class arfgroup(object):
 
     def _openfile(self, basename):
         print "Creating %s.arf" % basename
-        fp = self.factory(basename + ".arf")
-        fp.set_attributes(program='arfxplog')
+        fp = arf.open_file(basename + ".arf", mode='w-')
+        arf.set_attributes(fp, program='arfxplog')
         return fp
 
     def __getitem__(self, key):
@@ -185,55 +180,60 @@ def parse_explog(logfile, **options):
                 continue
             try:
                 chan, entry, onset = _reg_triggeron.search(line).groups()
-                if channels is not None and chan not in channels:
-                    continue
-                ifp = files[chan]
-                ifp.entry = int(entry)
-                lastonset = nx.uint64(onset) + fileonset
-                entry_name = "e%ld" % lastonset
-                ah = arfhandler[currentpen, currentsite]
-                if options.get('verbose', False):
-                    sys.stdout.write("%s/%s -> %s/%s" %
-                                     (filenames[chan], entry, ah.h5.filename, entry_name))
-                if lastonset in entries:
-                    entry = ah[entry_name]
-                else:
-                    entry = ah.create_entry(
-                        entry_name, ifp.timestamp, sample_count=lastonset,
-                        pen=currentpen, site=currentsite, **user_attributes)
-                    entries[lastonset] = entry
-
-                if skip_data:
-                    data = nx.zeros(1)
-                else:
-                    data = ifp.read()
-                sampling_rate = ifp.sampling_rate
-
-                if chan in chanprops and 'datatype' in chanprops[chan]:
-                    datatype = chanprops[chan]['datatype']
-                else:
-                    datatype = options['datatype']
-
-                entry.add_data(name=chan, data=data,
-                               datatype=datatype, sampling_rate=sampling_rate,
-                               compression=options[
-                                   'compress'], source_file=ifp.filename,
-                               source_entry=ifp.entry)
-
-                entry.attrs[
-                    'max_length'] = max(entry.attrs.get('max_length', 0.0),
-                                        1.0 * data.size / sampling_rate)
-                if options.get('verbose', False):
-                    sys.stdout.write("/%s\n" % chan)
             except AttributeError, e:
                 print >> sys.stderr, "line %d: Unparseable TTTT line: %s" % (
                     line_num, line)
-            except KeyError, e:
-                print >> sys.stderr, "line %d: TRIG_ON references channel %s, but I can't find the file for it\n(%s)" % \
-                    (line_num, chan, e)
+                continue
+            if channels is not None and chan not in channels:
+                continue
+            try:
+                ifp = files[chan]
             except ValueError, e:
                 print >> sys.stderr, "line %d: Error accesing entry %d in %s" % (
                     line_num, int(entry), chan)
+                continue
+            ifp.entry = int(entry)
+            lastonset = nx.uint64(onset) + fileonset
+            entry_name = "e%ld" % lastonset
+            try:
+                ah = arfhandler[currentpen, currentsite]
+            except KeyError, e:
+                print >> sys.stderr, "line %d: TRIG_ON references channel %s, but I can't find the file for it\n(%s)" % \
+                    (line_num, chan, e)
+                continue
+            if options.get('verbose', False):
+                sys.stdout.write("%s/%s -> %s/%s" %
+                                 (filenames[chan], entry, ah.filename, entry_name))
+            if lastonset in entries:
+                entry = ah[entry_name]
+            else:
+                entry = arf.create_entry(ah, entry_name,
+                                         ifp.timestamp, sample_count=lastonset,
+                                         pen=currentpen, site=currentsite, **user_attributes)
+                entries[lastonset] = entry
+
+            if skip_data:
+                data = nx.zeros(1)
+            else:
+                data = ifp.read()
+            sampling_rate = ifp.sampling_rate
+
+            if chan in chanprops and 'datatype' in chanprops[chan]:
+                datatype = chanprops[chan]['datatype']
+            else:
+                datatype = options['datatype']
+
+            arf.create_dataset(entry, name=chan, data=data,
+                               datatype=datatype, sampling_rate=sampling_rate,
+                               compression=options['compress'],
+                               source_file=ifp.filename,
+                               source_entry=ifp.entry)
+
+            entry.attrs[
+                'max_length'] = max(entry.attrs.get('max_length', 0.0),
+                                    1.0 * data.size / sampling_rate)
+            if options.get('verbose', False):
+                sys.stdout.write("/%s\n" % chan)
 
         # stimulus lines
         elif lstart == "QQQQ":
@@ -304,13 +304,13 @@ def match_stimuli(stimuli, entries, table_name='stimuli', verbose=False):
 
         # add to list of intervals. this is trickier in h5py
         if table_name not in entry:
-            stimtable = arf.table.create_table(
+            stimtable = arf.create_table(
                 entry, table_name, arf._interval_dtype,
                 units=units, datatype=arf.DataTypes.STIMI)
         else:
-            stimtable = arf.table(entry[table_name])
+            stimtable = entry[table_name]
         t_onset = float(onset - eonset) / sampling_rate
-        stimtable.append((stim, t_onset, t_onset))
+        arf.append_data(stimtable, (stim, t_onset, t_onset))
         entry.attrs['protocol'] = stim
         if verbose:
             sys.stdout.write("\n")
@@ -334,7 +334,7 @@ def check_samplerates(arfps):
                 print >> sys.stderr, "warning: %s has nodes with varying sampling rates" % (
                     arfp.h5.filename)
                 break
-        arfp.set_attributes(sampling_rate=srates[0])
+        arf.set_attributes(arfp, sampling_rate=srates[0])
 
 
 def arfxplog():
