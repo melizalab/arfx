@@ -56,6 +56,7 @@ def entry_repr(entry):
             if dset.dtype.names is not None:
                 out += " (compound type)"
 
+        out += ", units '%s'" % dset.attrs.get('units', '')
         out += ", type %s"  % datatypes[dset.attrs.get('datatype', arf.DataTypes.UNDEFINED)]
         if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
     return out
@@ -217,7 +218,10 @@ def extract_entries(src, entries, **options):
     ebase = options.get('template', None)
 
     with arf.open_file(src, 'r') as arfp:
-        arf.check_file_version(arfp)
+        try:
+            arf.check_file_version(arfp)
+        except Warning as e:
+            print "arfx: warning: %s" % e
         for index, ename in enumerate(arf.keys_by_creation(arfp)):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
@@ -340,7 +344,10 @@ def list_entries(src, entries, **options):
         raise IOError, "the file %s does not exist" % src
     print "%s:" % src
     with arf.open_file(src, 'r') as arfp:
-        arf.check_file_version(arfp)
+        try:
+            arf.check_file_version(arfp)
+        except Warning as e:
+            print "arfx: warning: %s" % e
         if entries is None or len(entries) == 0:
             try:
                 it = arf.keys_by_creation(arfp)
@@ -377,7 +384,10 @@ def update_entries(src, entries, **options):
         metadata['datatype'] = options['datatype']
 
     with arf.open_file(src, 'r+') as arfp:
-        arf.check_file_version(arfp)
+        try:
+            arf.check_file_version(arfp)
+        except Warning as e:
+            print "arfx: warning: %s" % e
         for i, entry in enumerate(arfp):
             if entries is None or len(entries) == 0 or posixpath.relpath(entry) in entries:
                 enode = arfp[entry]

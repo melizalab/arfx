@@ -42,11 +42,11 @@ def get_data_type(a):
 
 
 class arfgroup(object):
+    """Cache handles to one or more arf files.
 
-    """
-    Cache handles to one or more arf files. Arf files are indexed by
-    pen,site.  If split_sites is true, then each site refers to a
-    separate file.
+    Arf files are indexed by pen,site. If split_sites is true, then each site
+    refers to a separate file.
+
     """
     _template = "%s_%d_%d"
 
@@ -65,9 +65,9 @@ class arfgroup(object):
             self.handles = self._openfile(basename)
 
     def _openfile(self, basename):
-        print "Creating %s.arf" % basename
         fp = arf.open_file(basename + ".arf", mode='w-')
         arf.set_attributes(fp, program='arfxplog')
+        print "created %s.arf" % basename
         return fp
 
     def __getitem__(self, key):
@@ -197,10 +197,13 @@ def parse_explog(logfile, **options):
             entry_name = "e%ld" % lastonset
             try:
                 ah = arfhandler[currentpen, currentsite]
-            except KeyError, e:
+            except KeyError as e:
                 print >> sys.stderr, "line %d: TRIG_ON references channel %s, but I can't find the file for it\n(%s)" % \
                     (line_num, chan, e)
                 continue
+            except IOError as e:
+                print >> sys.stderr, "arfxplog: error: unable to create file - does it already exist?"
+                return
             if options.get('verbose', False):
                 sys.stdout.write("%s/%s -> %s/%s" %
                                  (filenames[chan], entry, ah.filename, entry_name))
