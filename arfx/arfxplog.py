@@ -200,7 +200,7 @@ def parse_explog(logfile, **options):
                 else:
                     entry = ah.create_entry(
                         entry_name, ifp.timestamp, sample_count=lastonset,
-                        pen=currentpen, site=currentsite, **user_attributes)
+                        pen=currentpen, site=currentsite, recid=len(entries), **user_attributes)
                     entries[lastonset] = entry
 
                 if skip_data:
