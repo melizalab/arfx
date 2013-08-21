@@ -66,7 +66,7 @@ class arfgroup(object):
 
     def _openfile(self, basename):
         fp = arf.open_file(basename + ".arf", mode='w-')
-        arf.set_attributes(fp, program='arfxplog')
+        arf.set_attributes(fp, file_creator='org.meliza.arfx/arfxplog ' + __version__)
         print "created %s.arf" % basename
         return fp
 
@@ -96,14 +96,12 @@ def parse_explog(logfile, **options):
                 types may be specified in the explog; these have
                 precedence
     channels:   if not None, only store data from these entries
-    skip_data:  if True, don't actually store the data (for debugging)
 
     Additional arguments are used to set attributes on the newly
     created entries.
     """
     import re
     channels = options.get('channels', None)
-    skip_data = options.get('skip_data', False)
 
     _reg_create = re.compile(
         r"'(?P<file>(?P<base>\S+)_\w+.pcm_seq2)' (?P<action>created|closed)")
@@ -207,19 +205,19 @@ def parse_explog(logfile, **options):
             if options.get('verbose', False):
                 sys.stdout.write("%s/%s -> %s/%s" %
                                  (filenames[chan], entry, ah.filename, entry_name))
+            data = ifp.read()
+            sampling_rate = ifp.sampling_rate
+
             if lastonset in entries:
                 entry = ah[entry_name]
             else:
                 entry = arf.create_entry(ah, entry_name,
-                                         ifp.timestamp, sample_count=lastonset,
+                                         ifp.timestamp,
+                                         sample_count=lastonset,
+                                         sampling_rate=sampling_rate,
+                                         entry_creator='org.meliza.arfx/arfxplog ' + __version__,
                                          pen=currentpen, site=currentsite, **user_attributes)
                 entries[lastonset] = entry
-
-            if skip_data:
-                data = nx.zeros(1)
-            else:
-                data = ifp.read()
-            sampling_rate = ifp.sampling_rate
 
             if chan in chanprops and 'datatype' in chanprops[chan]:
                 datatype = chanprops[chan]['datatype']

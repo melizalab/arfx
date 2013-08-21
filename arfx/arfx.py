@@ -161,6 +161,7 @@ def add_entries(tgt, files, **options):
 
     with arf.open_file(tgt, 'a') as arfp:
         arf.check_file_version(arfp)
+        arf.set_attributes(arfp, file_creator="org.meliza.arfx/arfx " + __version__, overwrite=False)
         for f in files:
             try:
                 for fp, entry_index, entry_name in iter_entries(f):
@@ -180,7 +181,9 @@ def add_entries(tgt, files, **options):
                         entry_name = default_entry_template.format(
                             base=ebase,
                             index=arf.count_children(arfp, Group))
-                    entry = arf.create_entry(arfp, entry_name, timestamp, **metadata)
+                    entry = arf.create_entry(arfp, entry_name, timestamp,
+                                             entry_creator="org.meliza.arfx/arfx " + __version__,
+                                             **metadata)
                     arf.create_dataset(entry, chan, fp.read(),
                                        datatype=datatype,
                                        sampling_rate=fp.sampling_rate,
