@@ -29,6 +29,7 @@ default_extract_template = "{entry}_{channel}"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
 
+event_dtype = nx.dtype([('start', 'u8'), ('status', 'u1'), ('name', 'S256')])
 
 def get_data_type(a):
     if a.isdigit():
@@ -230,9 +231,6 @@ def parse_explog(logfile, **options):
                                source_file=ifp.filename,
                                source_entry=ifp.entry)
 
-            entry.attrs[
-                'max_length'] = max(entry.attrs.get('max_length', 0.0),
-                                    1.0 * data.size / sampling_rate)
             if options.get('verbose', False):
                 sys.stdout.write("/%s\n" % chan)
 
@@ -253,11 +251,11 @@ def parse_explog(logfile, **options):
 
     if options.get('verbose', False):
         sys.stdout.write("Matching stimuli to entries:\n")
-    match_stimuli(stimuli, entries, verbose=options.get('verbose', False))
+    match_stimuli(stimuli, entries, sampling_rate=sampling_rate, verbose=options.get('verbose', False))
     check_samplerates(arfhandler)
 
 
-def match_stimuli(stimuli, entries, table_name='stimuli', verbose=False):
+def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli', verbose=False):
     """
     Create labels in arf entries that indicate stimulus onset and
     offset.  As the explog (or equivalent logfile) is parsed, the
@@ -265,8 +263,9 @@ def match_stimuli(stimuli, entries, table_name='stimuli', verbose=False):
     these times, this function matches each item in the list of
     stimuli to an entry.
 
-    stimuli: dictionary of onset,stimulus_name pairs
+    stimuli: dictionary of onset, stimulus_name pairs
     entries: dictionary of onset, arf entry pairs
+    sampling_rate: the sampling rate of the onset times
     table_name:  the name of the node to store the label data in
     verbose:     if true, print debug info about matches
     """
@@ -285,20 +284,14 @@ def match_stimuli(stimuli, entries, table_name='stimuli', verbose=False):
         eonset = entry_times[idx]
         entry = entries[eonset]
 
-        sampling_rate = 1.0
         units = 'samples'
-        for node in entry.itervalues():
-            # this assumes a single sampling rate for all data
-            if 'sampling_rate' in node.attrs:
-                sampling_rate = node.attrs['sampling_rate']
-                units = 's'
-                break
-        t_onset = float(onset - eonset) / sampling_rate
+        t_onset = onset - eonset
         if verbose:
-            sys.stdout.write("%s @ %.4f %s" % (entry.name, t_onset, units))
+            sys.stdout.write("%s @ %d samples" % (entry.name, t_onset))
 
         # check that stim isn't occuring after the end of the recording
-        if t_onset >= entry.attrs.get('max_length', nx.inf):
+        max_length = max(dset.size for dset in entry.values())
+        if t_onset >= max_length:
             if verbose:
                 sys.stdout.write(" :: after end of entry, skipping\n")
             continue
@@ -306,12 +299,12 @@ def match_stimuli(stimuli, entries, table_name='stimuli', verbose=False):
         # add to list of intervals. this is trickier in h5py
         if table_name not in entry:
             stimtable = arf.create_table(
-                entry, table_name, arf._interval_dtype,
-                units=units, datatype=arf.DataTypes.STIMI)
+                entry, table_name, event_dtype,
+                sampling_rate=sampling_rate,
+                units=units, datatype=arf.DataTypes.EVENT)
         else:
             stimtable = entry[table_name]
-        t_onset = float(onset - eonset) / sampling_rate
-        arf.append_data(stimtable, (stim, t_onset, t_onset))
+        arf.append_data(stimtable, (t_onset, 0x00, stim))
         entry.attrs['protocol'] = stim
         if verbose:
             sys.stdout.write("\n")
