@@ -25,7 +25,6 @@ import posixpath
 import argparse
 import arf
 from . import io
-from tools import filecache
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
@@ -295,9 +294,10 @@ def copy_entries(tgt, files, **options):
 
     entry_base: if specified, rename entries sequentially in target file
     """
+    from tools import memoized
     from h5py import Group
     ebase = options.get('template', None)
-    acache = filecache(arf.open_file)
+    acache = memoized(arf.open_file)
 
     with arf.open_file(tgt, 'a') as arfp:
         arf.check_file_version(arfp)
@@ -308,9 +308,9 @@ def copy_entries(tgt, files, **options):
             # on windows, dir\file.arf/entry is an entry
             pn, fn = posixpath.split(f)
             if os.path.isfile(f):
-                it = ((f, entry) for ename, entry in acache[f].items())
+                it = ((f, entry) for ename, entry in acache(f).items())
             elif os.path.isfile(pn):
-                fp = acache[pn]
+                fp = acache(pn)
                 if fn in fp:
                     it = ((pn, fp[fn]),)
                 else:
@@ -332,8 +332,6 @@ def copy_entries(tgt, files, **options):
                         print "%s%s -> %s/%s" % (fname, entry.name, tgt, entry_name)
                 except Exception, e:
                     print "arfx: copy error for %s%s: %s" % (fname, entry.name, e)
-
-    acache.__exit__(None, None, None)
 
 
 def list_entries(src, entries, **options):
