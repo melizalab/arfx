@@ -227,6 +227,7 @@ def extract_entries(src, entries, **options):
         for index, ename in enumerate(arf.keys_by_creation(arfp)):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
+            mtime = attrs.get('timestamp', [None])[0]
             if entries is None or ename in entries:
                 for channel in entry:
                     dset = entry[channel]
@@ -237,20 +238,15 @@ def extract_entries(src, entries, **options):
                     fname = parse_name_template(dset,
                                                 ebase or default_extract_template,
                                                 index=index)
-                    try:
-                        fp = io.open(fname, 'w', **attrs)
-                    except TypeError as e:
-                        raise IOError("can't write to file '%s' - %s" % (fname, e))
                     dtype, stype, ncols = arf.dataset_properties(dset)
                     if dtype != 'sampled':
+                        if options['verbose']:
+                            print "%s -> skipped (no supported containers)" % dset.name
                         continue
 
-                    fp.write(dset)
-                    if 'timestamp' in entry.attrs:
-                        fp.timestamp = entry.attrs['timestamp'][0]
-                    else:
-                        # try to set the modification time
-                        pass
+                    with io.open(fname, 'w', **attrs) as fp:
+                        fp.write(dset)
+                    os.utime(fname, (os.stat(fname).st_atime, mtime))
 
                     if options['verbose']:
                         print "%s -> %s" % (dset.name, fname)
