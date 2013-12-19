@@ -4,93 +4,58 @@
 
 Copyright (C) 2013 Dan Meliza <dmeliza@gmail.com>
 Created Tue Jul 23 15:27:53 2013
-"""
 
+"""
 import os
-import sys
+import re
 import numpy as nx
+import logging
 
 import arf
-from . import io
-from arfx import __version__
+import arfx
+import io
+from tools import memoized
 
-defaults = {
-    'verbose': False,
-    'entry_base': None,
-    'sampling': 20000,
-    'datatype': arf.DataTypes.UNDEFINED,
-    'compress': 1,
-    'repack': True,
-    'split_sites': False,
-    'entry_attrs': {},
-}
-# template for extracted files
-default_extract_template = "{entry}_{channel}"
-# template for created entries
-default_entry_template = "{base}_{index:04}"
-
+# template for target file
+target_file_template = "{0}_{1}_{2}"
+# dtype for event data
 event_dtype = nx.dtype([('start', 'u8'), ('status', 'u1'), ('name', 'S256')])
 
-def get_data_type(a):
-    if a.isdigit():
-        defaults['datatype'] = int(a)
+_reg_create = re.compile(
+    r"'(?P<file>(?P<base>\S+)_\w+.pcm_seq2)' (?P<action>created|closed)")
+_reg_triggeron = re.compile(
+    r"_ON, (?P<chan>\S+):entry (?P<entry>\d+) \((?P<onset>\d+)\)")
+_reg_stimulus = re.compile(
+    r"stimulus: REL:(?P<rel>[\d\.]*) ABS:(?P<abs>\d*) NAME:'(?P<stim>\S*)'")
+
+log = logging.getLogger('arfxplog')   # root logger
+
+@memoized
+def get_uuid(pen, site, channel):
+    """Returns a random uuid for a recording site/channel"""
+    from uuid import uuid4
+    ret = str(uuid4())
+    log.info("assigned %s/%s/%s uuid: %s", pen, site, channel, ret)
+    return ret
+
+
+@memoized
+def get_dest_arf(filename, dry_run):
+    """Returns handle for destination arf file"""
+    if dry_run:
+        fp = arf.open_file(filename + ".arf", mode="a", driver="core", backing_store=False)
     else:
-        defaults['datatype'] = getattr(arf.DataTypes, a.upper(), None)
-        if defaults['datatype'] is None:
-            print >> sys.stderr, "Error: %s is not a valid data type" % a
-            print >> sys.stderr, arf.DataTypes._doc()
-            sys.exit(-1)
+        fp = arf.open_file(filename + ".arf", mode="w-")
+        arf.set_attributes(fp, file_creator='org.meliza.arfx/arfxplog ' + arfx.__version__)
+        log.info("opened '%s.arf' for writing", filename)
+    return fp
 
 
-class arfgroup(object):
-    """Cache handles to one or more arf files.
-
-    Arf files are indexed by pen,site. If split_sites is true, then each site
-    refers to a separate file.
-
-    """
-    _template = "%s_%d_%d"
-
-    def __init__(self, basename, **options):
-        """
-        basename:  the basename of the arf files in the group
-
-        Additional options
-        ------------------
-        split_sites:   split data for each site into multiple files (default False)
-        """
-        self.basename = basename
-        if options.get('split_sites', False):
-            self.handles = {}
-        else:
-            self.handles = self._openfile(basename)
-
-    def _openfile(self, basename):
-        fp = arf.open_file(basename + ".arf", mode='w-')
-        arf.set_attributes(fp, file_creator='org.meliza.arfx/arfxplog ' + __version__)
-        print "created %s.arf" % basename
-        return fp
-
-    def __getitem__(self, key):
-        if not isinstance(self.handles, dict):
-            return self.handles
-        basename = self._template % (self.basename, key[0], key[1])
-        if basename not in self.handles:
-            self.handles[basename] = self._openfile(basename)
-        return self.handles[basename]
-
-    def __iter__(self):
-        if isinstance(self.handles, dict):
-            return self.handles.itervalues()
-        else:
-            return (h for h in (self.handles,))
-
-
-def parse_explog(logfile, **options):
-    """
-    Parse an explog file to figure out where all the data is stored,
-    and when everything happened. Creates one or more arf files to
-    hold the data, and stores data under the associated entry.
+def parse_explog(explog, entry_attrs, datatype, split_sites=False,
+                 compression=1, channels=None, dry_run=False):
+    """Parses an explog file to figure out where all the data is stored, and when
+    everything happened. Creates one or more arf files to hold the data, and
+    stores data under the associated entry.
 
     verbose:    print information about what's happening
     datatype:   specify the default type of data being recorded
@@ -98,38 +63,25 @@ def parse_explog(logfile, **options):
                 precedence
     channels:   if not None, only store data from these entries
 
-    Additional arguments are used to set attributes on the newly
-    created entries.
+    Additional arguments are used to set attributes on the newly created
+    entries.
+
     """
-    import re
-    channels = options.get('channels', None)
-
-    _reg_create = re.compile(
-        r"'(?P<file>(?P<base>\S+)_\w+.pcm_seq2)' (?P<action>created|closed)")
-    _reg_triggeron = re.compile(
-        r"_ON, (?P<chan>\S+):entry (?P<entry>\d+) \((?P<onset>\d+)\)")
-    _reg_stimulus = re.compile(
-        r"stimulus: REL:(?P<rel>[\d\.]*) ABS:(?P<abs>\d*) NAME:'(?P<stim>\S*)'")
-
-    # look up file by channel
-    filenames = {}
+    # look up source pcmseq2 file by channel name
     files = {}
     # dict of stimuli indexed by samplecount
     stimuli = {}
-    # dict of channel properties from the file
-    chanprops = {}
+    # dataset attributes
+    dset_attrs = {}
     # set of all onset times
     entries = {}
     fileonset = nx.uint64(0)  # corresponds to C long long type
     lastonset = nx.uint64(0)
-    currentpen = 0
-    currentsite = 0
+    pen = 0
+    site = 0
 
-    user_attributes = options['entry_attrs']
-
-    fp = open(logfile, 'rt')
-    arfhandler = arfgroup(os.path.splitext(logfile)[0], **options)
-    for line_num, line in enumerate(fp):
+    efp = open(explog, 'rU')
+    for line_num, line in enumerate(efp):
         lstart = line[0:4]
 
         # control info
@@ -143,35 +95,38 @@ def parse_explog(logfile, **options):
                     if 'datatype' in props:
                         props['datatype'] = getattr(
                             arf.DataTypes, props['datatype'].upper())
-                    chanprops[fields[0]] = props
+                    dset_attrs[fields[0]] = props
                 except (AttributeError, ValueError):
-                    print >> sys.stderr, "parse error: bad channel metadata (line %d): ignoring " % line_num
+                    log.warn("L%d parse error: bad channel metadata: ignoring", line_num)
 
         # file creation
         elif lstart == "FFFF":
             try:
                 fname, base, action = _reg_create.search(line).groups()
-                if channels is not None and base not in channels:
-                    continue
-                if action == 'created':
-                    try:
-                        files[base] = io.open(fname, mode='r')
-                        filenames[base] = fname
-                    except Exception, e:
-                        print >> sys.stderr, "error opening file %s; ARF files will be incomplete" % fname
-                else:
-                    filenames.pop(base, None)
-                    files.pop(base, None)
-            except AttributeError, e:
-                print >> sys.stderr, "parse error: Unparseable FFFF line (%d): %s" % (
-                    line_num, line)
+            except AttributeError:
+                log.warn("L%d parse error: %s", line_num, line)
+                continue
+            if channels is not None and base not in channels:
+                continue
+            if action == 'created':
+                ifname = os.path.join(os.path.dirname(explog), fname)
+                try:
+                    files[base] = io.open(ifname, mode='r')
+                except Exception, e:
+                    log.warn("error opening source file '%s'; ARF files will be incomplete",
+                             ifname)
+                    log.debug(e)
+            else:
+                # file was closed; remove from list
+                files.pop(base, None)
 
         # new pen or new site
         elif lstart == "IIII":
-            if line.find('pen') > 0:
-                currentpen = int(line.split()[-1])
-            elif line.find('site') > 0:
-                currentsite = int(line.split()[-1])
+            fields = line.split()
+            if fields[-2] == 'pen':
+                pen = fields[-1]
+            elif fields[-2] == 'site':
+                site = fields[-1]
 
         # trigger lines
         elif lstart == "TTTT":
@@ -179,60 +134,66 @@ def parse_explog(logfile, **options):
                 continue
             try:
                 chan, entry, onset = _reg_triggeron.search(line).groups()
-            except AttributeError, e:
-                print >> sys.stderr, "line %d: Unparseable TTTT line: %s" % (
-                    line_num, line)
+            except AttributeError:
+                log.warn("L%d parse error: %s", line_num, line)
                 continue
             if channels is not None and chan not in channels:
                 continue
             try:
                 ifp = files[chan]
-            except ValueError, e:
-                print >> sys.stderr, "line %d: Error accesing entry %d in %s" % (
-                    line_num, int(entry), chan)
+            except KeyError:
+                # user should already have been warned about missing data from this file
                 continue
-            ifp.entry = int(entry)
+            try:
+                ifp.entry = int(entry)
+            except ValueError:
+                log.warn("L%d runtime error: unable to access %s/%d", line_num,
+                            int(entry), chan)
+                continue
             lastonset = nx.uint64(onset) + fileonset
             entry_name = "e%ld" % lastonset
+            ofname = target_file_template.format(base, pen, site) if split_sites else base
             try:
-                ah = arfhandler[currentpen, currentsite]
-            except KeyError as e:
-                print >> sys.stderr, "line %d: TRIG_ON references channel %s, but I can't find the file for it\n(%s)" % \
-                    (line_num, chan, e)
-                continue
-            except IOError as e:
-                print >> sys.stderr, "arfxplog: error: unable to create file - does it already exist?"
-                return
-            if options.get('verbose', False):
-                sys.stdout.write("%s/%s -> %s/%s" %
-                                 (filenames[chan], entry, ah.filename, entry_name))
+                ofp = get_dest_arf(ofname, dry_run)
+            except IOError:
+                log.error("target file '%s' already exists; aborting", ofname)
+                return -1
+            log.debug("%s/%s -> %s/%s/%s", ifp.filename, entry, ofp.filename, entry_name, chan)
             data = ifp.read()
             sampling_rate = ifp.sampling_rate
 
-            if lastonset in entries:
-                entry = ah[entry_name]
+            if 'sampling_rate' in ofp.attrs:
+                if ofp.attrs['sampling_rate'] != sampling_rate:
+                    log.error("%s/%s sampling rate (%d) doesn't match target file (%d).\n"
+                              "You may be attempting to load data from the wrong files!",
+                              ifp.filename, entry, sampling_rate, ofp.attrs['sampling_rate'])
+                    return -1
             else:
-                entry = arf.create_entry(ah, entry_name,
-                                         ifp.timestamp,
-                                         sample_count=lastonset,
-                                         sampling_rate=sampling_rate,
-                                         entry_creator='org.meliza.arfx/arfxplog ' + __version__,
-                                         pen=currentpen, site=currentsite, **user_attributes)
+                ofp.attrs['sampling_rate'] = sampling_rate
+
+            if lastonset in entries:
+                entry = ofp[entry_name]
+            else:
+                entry = arf.create_entry(
+                    ofp, entry_name,
+                    ifp.timestamp,
+                    sample_count=lastonset,
+                    sampling_rate=sampling_rate,
+                    entry_creator='org.meliza.arfx/arfxplog ' + arfx.__version__,
+                    pen=pen, site=site, **entry_attrs)
                 entries[lastonset] = entry
 
-            if chan in chanprops and 'datatype' in chanprops[chan]:
-                datatype = chanprops[chan]['datatype']
+            if chan in dset_attrs and 'datatype' in dset_attrs[chan]:
+                chan_datatype = dset_attrs[chan]['datatype']
             else:
-                datatype = options['datatype']
+                chan_datatype = datatype
 
             arf.create_dataset(entry, name=chan, data=data,
-                               datatype=datatype, sampling_rate=sampling_rate,
-                               compression=options['compress'],
+                               datatype=chan_datatype, sampling_rate=sampling_rate,
+                               compression=compression,
                                source_file=ifp.filename,
-                               source_entry=ifp.entry)
-
-            if options.get('verbose', False):
-                sys.stdout.write("/%s\n" % chan)
+                               source_entry=ifp.entry,
+                               uuid=get_uuid(pen, site, chan))
 
         # stimulus lines
         elif lstart == "QQQQ":
@@ -242,20 +203,16 @@ def parse_explog(logfile, **options):
                 if stimname.startswith('File='):
                     stimname = stimname[5:]
                 stimuli[lastonset] = stimname
-            except AttributeError, e:
-                print >> sys.stderr, "parse error: Unparseable QQQQ line (%d): %s" % (
-                    line_num, line)
+            except AttributeError:
+                log.warn("L%d parse error: %s", line_num, line)
 
     # done parsing file
-    fp.close()
+    efp.close()
 
-    if options.get('verbose', False):
-        sys.stdout.write("Matching stimuli to entries:\n")
-    match_stimuli(stimuli, entries, sampling_rate=sampling_rate, verbose=options.get('verbose', False))
-    check_samplerates(arfhandler)
+    match_stimuli(stimuli, entries, sampling_rate=sampling_rate)
 
 
-def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli', verbose=False):
+def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
     """
     Create labels in arf entries that indicate stimulus onset and
     offset.  As the explog (or equivalent logfile) is parsed, the
@@ -269,16 +226,14 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli', verbose
     table_name:  the name of the node to store the label data in
     verbose:     if true, print debug info about matches
     """
+    log.debug("Matching stimuli to entries:")
     entry_times = nx.sort(entries.keys())
     # slow, but simple
     for onset in sorted(stimuli.keys()):
         stim = stimuli[onset]
-        if verbose:
-            sys.stdout.write("%s (onset=%d) -> " % (stim, onset))
         idx = entry_times.searchsorted(onset, side='right') - 1
         if idx < 0 or idx > entry_times.size:
-            if verbose:
-                sys.stdout.write("no match!\n")
+            log.debug("%s (onset=%d) -> no match!", stim, onset)
             continue
 
         eonset = entry_times[idx]
@@ -286,15 +241,14 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli', verbose
 
         units = 'samples'
         t_onset = onset - eonset
-        if verbose:
-            sys.stdout.write("%s @ %d samples" % (entry.name, t_onset))
 
         # check that stim isn't occuring after the end of the recording
         max_length = max(dset.size for dset in entry.values())
         if t_onset >= max_length:
-            if verbose:
-                sys.stdout.write(" :: after end of entry, skipping\n")
+            log.debug("%s (onset=%d) -> after end of last entry", stim, onset)
             continue
+        log.debug("%s (onset=%d) -> %s @ %d samples",
+                  stim, onset, entry.name, t_onset)
 
         # add to list of intervals. this is trickier in h5py
         if table_name not in entry:
@@ -306,29 +260,6 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli', verbose
             stimtable = entry[table_name]
         arf.append_data(stimtable, (t_onset, 0x00, stim))
         entry.attrs['protocol'] = stim
-        if verbose:
-            sys.stdout.write("\n")
-
-
-def check_samplerates(arfps):
-    """
-    For each arf in arfps, iterate through all sampled data nodes and
-    collate sampling rate information.  For saber-generated data,
-    these should all be equal.  Check for this, and set a global
-    sampling-rate attribute on the file.
-    """
-    for arfp in arfps:
-        srates = []
-        for entry in arfp:
-            for dset in arfp[entry].itervalues():
-                if 'sampling_rate' in dset.attrs:
-                    srates.append(dset.attrs['sampling_rate'])
-        for sr in srates:
-            if sr != srates[0]:
-                print >> sys.stderr, "warning: %s has nodes with varying sampling rates" % (
-                    arfp.h5.filename)
-                break
-        arf.set_attributes(arfp, sampling_rate=srates[0])
 
 
 def arfxplog():
@@ -349,48 +280,61 @@ def arfxplog():
      --help-datatypes: display documentation on available data types
      --version: display version information
     """
-    import getopt
+    import datetime
+    import argparse
 
-    channels = None
-    opts, args = getopt.getopt(sys.argv[1:], 'hva:e:T:k:s',
-                               ['chan=', 'help', 'version', 'help-datatypes', "debug"])
-    for o, a in opts:
-        if o in ('-h', '--help'):
-            print arfxplog.__doc__
-            sys.exit(0)
-        elif o == '--version':
-            print "%s version: %s" % (os.path.basename(sys.argv[0]), __version__)
-            sys.exit(0)
-        elif o == '--help-datatypes':
-            print arf.DataTypes._doc()
-            sys.exit(0)
-        elif o == '-v':
-            defaults['verbose'] = True
-        elif o == '-a':
-            defaults['entry_attrs']['animal'] = a
-        elif o == '-e':
-            defaults['entry_attrs']['experimenter'] = a
-        elif o == '-T':
-            get_data_type(a)
-        elif o == '-k':
-            try:
-                key, val = a.split('=')
-                defaults['entry_attrs'][key] = val
-            except ValueError:
-                print >> sys.stderr, "-k %s argument badly formed; needs key=value" % a
-        elif o == '--chan':
-            channels = a.split(',')
-        elif o == '-s':
-            defaults['split_sites'] = True
-        elif o == '--debug':
-            defaults['skip_data'] = True
+    p = argparse.ArgumentParser(description="Move data from a saber experiment into ARF format",)
+    p.add_argument('--version', action='version',
+                   version='%(prog)s ' + arfx.__version__)
+    p.add_argument('--dry-run', help="parse the explog but don't save the data to disk",
+                   action="store_true")
+    p.add_argument('--help-datatypes',
+                   help='print available datatypes and exit',
+                   action='version', version=arf.DataTypes._doc())
+    p.add_argument('-v', '--verbose', help="verbose output",
+                   action="store_true")
+    p.add_argument('-T', help='specify data type (see --help-datatypes)',
+                   default=arf.DataTypes.UNDEFINED, metavar='DATATYPE',
+                   dest='datatype', action=arfx.ParseDataType)
+    p.add_argument('-k', help='specify attributes of entries', action=arfx.ParseKeyVal,
+                   metavar="KEY=VALUE", dest='attrs', default={})
+    p.add_argument('-s', help="generate arf file for each pen/site",
+                   action="store_true", dest='split')
+    p.add_argument('-a', help="specify the animal in the experiment", dest='animal')
+    p.add_argument('-e', help="specify the experimenter", dest='experimenter')
+    p.add_argument('-z', help="compression level (0-9)", type=int, default=1,
+                   dest="compression")
+    p.add_argument('--chan', help='restrict to specific channels (comma-delimited list)',
+                   dest="channels")
+    p.add_argument("explog", help="explog generated by saber (note: pcm_seq2 files must "
+                   "be in the same directory)")
 
-    if len(args) < 1:
-        print arfxplog.__doc__
-        sys.exit(-1)
+    opts = p.parse_args()
 
-    parse_explog(args[0], channels=channels, **defaults)
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter("[%(name)s] %(message)s")
+    if opts.verbose:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    log.setLevel(loglevel)
+    ch.setLevel(loglevel)  # change
+    ch.setFormatter(formatter)
+    log.addHandler(ch)
+    log.info("version: %s", arfx.__version__)
+    log.info("run time: %s", datetime.datetime.now())
 
+    if opts.split:
+        log.info("data will be split into per-site arf files")
+    if opts.channels is not None:
+        opts.channels = opts.channels.split(",")
+        log.info("data will only be stored from channels: %s", opts.channels)
+    opts.attrs['animal'] = opts.animal
+    opts.attrs['experimenter'] = opts.experimenter
+
+    return parse_explog(opts.explog, opts.attrs, opts.datatype, split_sites=opts.split,
+                        compression=opts.compression, channels=opts.channels,
+                        dry_run=opts.dry_run)
 
 # Variables:
 # End:

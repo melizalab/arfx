@@ -45,7 +45,7 @@ pcmfile_init(PcmfileObject* self, PyObject* args, PyObject *kwds)
 
         // write mode is disabled for arfx
         if (strcmp(mode,"r") != 0) {
-                PyErr_Format(PyExc_ValueError, "Writing to pcm_seq2 files is not supported", filename);
+                PyErr_Format(PyExc_ValueError, "Writing to pcm_seq2 files is not supported");
                 return -1;
         }
 

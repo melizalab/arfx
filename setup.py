@@ -52,7 +52,6 @@ entry, which is a set of data channels that all start at the same time.
 """
 
 compiler_settings = {
-    'libraries': ['hdf5'],
     'include_dirs': [numpy.get_include()],
 }
 if sys.platform == 'darwin':
@@ -76,10 +75,12 @@ setup(
 
     packages=find_packages(exclude=["*test*"]),
     ext_modules=[Extension('arfx.pcmseqio',
-                           sources=[
-                           'src/pcmseqio.c', 'src/pcmseq.c'], **compiler_settings),
-        Extension(
-            'arfx.h5vlen', sources=['src/h5vlen' + SUFFIX], **compiler_settings)],
+                           sources=['src/pcmseqio.c', 'src/pcmseq.c'],
+                           **compiler_settings),
+                 Extension('arfx.h5vlen',
+                           sources=['src/h5vlen' + SUFFIX],
+                           libraries=['hdf5'],
+                           **compiler_settings)],
     cmdclass={'build_ext': build_ext},
     entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
                               '.wav = ewave:wavfile',
