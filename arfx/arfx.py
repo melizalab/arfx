@@ -17,19 +17,23 @@ Scripts
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
 
-__version__ = "2.1.0-SNAPSHOT"
+__version__ = "2.2.0-SNAPSHOT"
 
 import os
 import sys
 import posixpath
 import argparse
+import logging
+
 import arf
-from . import io
+import io
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
+
+log = logging.getLogger('arfx')   # root logger
 
 def entry_repr(entry):
     from h5py import h5t
@@ -39,7 +43,8 @@ def entry_repr(entry):
     for k, v in attrs.items():
         if k.isupper(): continue
         if k == 'timestamp':
-            out += "\n  timestamp : %s" % arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f")
+            out += ("\n  timestamp : %s" %
+                    arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f"))
         elif k == 'uuid':
             out += "\n  uuid : %s" % arf.get_uuid(entry)
         else:
@@ -59,6 +64,46 @@ def entry_repr(entry):
         out += ", type %s"  % datatypes[dset.attrs.get('datatype', arf.DataTypes.UNDEFINED)]
         if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
     return out
+
+
+def dataset_properties(dset):
+    """Infers the type of data and some properties of an hdf5 dataset.
+
+    Returns tuple: (sampled|event|interval|unknown), (array|table|vlarry), ncol
+    """
+    from h5py import h5t
+    interval_dtype_names = ('name', 'start', 'stop')
+    dtype = dset.id.get_type()
+
+    if isinstance(dtype, h5t.TypeVlenID):
+        return 'event', 'vlarray', dset.id.shape[0]
+
+    if isinstance(dtype, h5t.TypeCompoundID):
+        # table types; do a check on the dtype for backwards compat with 1.0
+        names, ncol = dtype.dtype.names, dtype.get_nmembers()
+        if 'start' not in names:
+            contents = 'unknown'
+        elif any(k not in names for k in interval_dtype_names):
+            contents = 'event'
+        else:
+            contents = 'interval'
+        return contents, 'table', ncol
+
+    dtt = dset.attrs.get('datatype', 0)
+    ncols = len(dset.shape) < 2 and 1 or dset.shape[1]
+    if dtt < arf.DataTypes.EVENT:
+        # assume UNKNOWN is sampled
+        return 'sampled', 'array', ncols
+    else:
+        return 'event', 'array', ncols
+
+
+def pluralize(n, sing='', plurl='s'):
+    """Returns 'sing' if n == 1, else 'plurl'"""
+    if n == 1:
+        return sing
+    else:
+        return plurl
 
 
 def parse_name_template(node, template, index=0, default="NA"):
@@ -160,39 +205,36 @@ def add_entries(tgt, files, **options):
 
     with arf.open_file(tgt, 'a') as arfp:
         arf.check_file_version(arfp)
-        arf.set_attributes(arfp, file_creator="org.meliza.arfx/arfx " + __version__, overwrite=False)
+        arf.set_attributes(arfp, file_creator="org.meliza.arfx/arfx " + __version__,
+                           overwrite=False)
         for f in files:
-            try:
-                for fp, entry_index, entry_name in iter_entries(f):
-                    timestamp = getattr(fp, 'timestamp', None)
-                    if timestamp is None:
-                        # kludge for ewave
-                        if hasattr(fp, 'fp') and hasattr(fp.fp, 'fileno'):
-                            timestamp = os.fstat(fp.fp.fileno()).st_mtime
-                        else:
-                            raise ValueError("%s/%d missing required timestamp" %
-                                             (f, entry_index))
-                    if not hasattr(fp, 'sampling_rate'):
-                        raise ValueError("%s/%d missing required sampling_rate attribute" %
+            for fp, entry_index, entry_name in iter_entries(f):
+                timestamp = getattr(fp, 'timestamp', None)
+                if timestamp is None:
+                    # kludge for ewave
+                    if hasattr(fp, 'fp') and hasattr(fp.fp, 'fileno'):
+                        timestamp = os.fstat(fp.fp.fileno()).st_mtime
+                    else:
+                        raise ValueError("%s/%d missing required timestamp" %
                                          (f, entry_index))
+                if not hasattr(fp, 'sampling_rate'):
+                    raise ValueError("%s/%d missing required sampling_rate attribute" %
+                                     (f, entry_index))
 
-                    if ebase is not None:
-                        entry_name = default_entry_template.format(
-                            base=ebase,
-                            index=arf.count_children(arfp, Group))
-                    entry = arf.create_entry(arfp, entry_name, timestamp,
-                                             entry_creator="org.meliza.arfx/arfx " + __version__,
-                                             **metadata)
-                    arf.create_dataset(entry, chan, fp.read(),
-                                       datatype=datatype,
-                                       sampling_rate=fp.sampling_rate,
-                                       compression=compress,
-                                       source_file=f,
-                                       source_entry=entry_index)
-                    if options['verbose']:
-                        print "%s/%d -> /%s/%s" % (f, entry_index, entry_name, chan)
-            except Exception, e:
-                print "arfx: input error: %s" % e
+                if ebase is not None:
+                    entry_name = default_entry_template.format(
+                        base=ebase,
+                        index=arf.count_children(arfp, Group))
+                entry = arf.create_entry(arfp, entry_name, timestamp,
+                                         entry_creator="org.meliza.arfx/arfx " + __version__,
+                                         **metadata)
+                arf.create_dataset(entry, chan, fp.read(),
+                                   datatype=datatype,
+                                   sampling_rate=fp.sampling_rate,
+                                   compression=compress,
+                                   source_file=f,
+                                   source_entry=entry_index)
+                log.debug("%s/%d -> /%s/%s", f, entry_index, entry_name, chan)
 
 
 def create_and_add_entries(tgt, files, **options):
@@ -223,7 +265,7 @@ def extract_entries(src, entries, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            print "arfx: warning: %s" % e
+            log.warn("warning: %s", e)
         for index, ename in enumerate(arf.keys_by_creation(arfp)):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
@@ -238,18 +280,16 @@ def extract_entries(src, entries, **options):
                     fname = parse_name_template(dset,
                                                 ebase or default_extract_template,
                                                 index=index)
-                    dtype, stype, ncols = arf.dataset_properties(dset)
+                    dtype, stype, ncols = dataset_properties(dset)
                     if dtype != 'sampled':
-                        if options['verbose']:
-                            print "%s -> skipped (no supported containers)" % dset.name
+                        log.debug("%s -> skipped (no supported containers)", dset.name)
                         continue
 
                     with io.open(fname, 'w', **attrs) as fp:
                         fp.write(dset)
                     os.utime(fname, (os.stat(fname).st_atime, mtime))
 
-                    if options['verbose']:
-                        print "%s -> %s" % (dset.name, fname)
+                    log.debug("%s -> %s", dset.name, fname)
 
 
 def delete_entries(src, entries, **options):
@@ -272,12 +312,11 @@ def delete_entries(src, entries, **options):
                 try:
                     del arfp[entry]
                     count += 1
-                    if options['verbose']:
-                        print "deleted /%s" % entry
+                    log.debug("deleted /%s", entry)
                 except Exception, e:
-                    print "Error deleting %s: %s" % (entry, e)
-            elif options['verbose']:
-                print "/%s: no such entry" % entry
+                    log.error("unable to delete %s: %s", entry, e)
+            else:
+                log.debug("unable to delete %s: no such entry", entry)
     if count > 0 and options['repack']:
         repack_file(src, **options)
 
@@ -310,24 +349,20 @@ def copy_entries(tgt, files, **options):
                 if fn in fp:
                     it = ((pn, fp[fn]),)
                 else:
-                    print "Error: no such entry %s" % f
+                    log.error("unable to copy %s: no such entry", f)
                     continue
             else:
-                print "Error: %s does not exist" % f
+                log.error("unable to copy %s: does not exist", f)
                 continue
 
             for fname, entry in it:
-                try:
-                    if ebase is not None:
-                        entry_name = default_entry_template.format(
-                            base=ebase, index=arf.count_children(arfp, Group))
-                    else:
-                        entry_name = posixpath.basename(entry.name)
-                    arfp.copy(entry, arfp, name=entry_name)
-                    if options['verbose']:
-                        print "%s%s -> %s/%s" % (fname, entry.name, tgt, entry_name)
-                except Exception, e:
-                    print "arfx: copy error for %s%s: %s" % (fname, entry.name, e)
+                if ebase is not None:
+                    entry_name = default_entry_template.format(
+                        base=ebase, index=arf.count_children(arfp, Group))
+                else:
+                    entry_name = posixpath.basename(entry.name)
+                arfp.copy(entry, arfp, name=entry_name)
+                log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
 
 def list_entries(src, entries, **options):
@@ -338,13 +373,13 @@ def list_entries(src, entries, **options):
              that are in this list (more verbosely)
     """
     if not os.path.exists(src):
-        raise IOError, "the file %s does not exist" % src
+        raise IOError("the file %s does not exist" % src)
     print "%s:" % src
     with arf.open_file(src, 'r') as arfp:
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            print "arfx: warning: %s" % e
+            log.warn("warning: %s", e)
         if entries is None or len(entries) == 0:
             try:
                 it = arf.keys_by_creation(arfp)
@@ -353,14 +388,14 @@ def list_entries(src, entries, **options):
             for name in it:
                 entry = arfp[name]
                 if options.get('verbose', False):
-                    print entry_repr(entry)
+                    print(entry_repr(entry))
                 else:
-                    print "%s: %d channel%s" % (entry.name, len(entry),
-                                                arf.pluralize(len(entry)))
+                    print("%s: %d channel%s" % (entry.name, len(entry),
+                                                arf.pluralize(len(entry))))
         else:
             for ename in entries:
                 if ename in arfp:
-                    print entry_repr(arfp[ename])
+                    print(entry_repr(arfp[ename]))
 
 
 def update_entries(src, entries, **options):
@@ -384,22 +419,22 @@ def update_entries(src, entries, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            print "arfx: warning: %s" % e
+            log.warn("warning: %s", e)
         for i, entry in enumerate(arfp):
             if entries is None or len(entries) == 0 or posixpath.relpath(entry) in entries:
                 enode = arfp[entry]
                 if options.get('verbose', False):
-                    print "vvvvvvvvvv"
-                    print entry_repr(enode)
-                    print "**********"
+                    print("vvvvvvvvvv")
+                    print(entry_repr(enode))
+                    print("**********")
                 if ebase:
                     name = parse_name_template(enode, ebase, index=i)
                     arfp[name] = enode
                     del arfp[entry]  # entry object should remain valid
                 arf.set_attributes(enode, **metadata)
                 if options.get('verbose', False):
-                    print entry_repr(enode)
-                    print "^^^^^^^^^^"
+                    print(entry_repr(enode))
+                    print("^^^^^^^^^^")
 
 
 def repack_file(path, **options):
@@ -438,7 +473,7 @@ class ParseKeyVal(argparse.Action):
         if kv is None:
             kv = dict()
         if not arg.count('=') == 1:
-            print >> sys.stderr, "-k %s argument badly formed; needs key=value" % arg
+            raise ValueError("-k %s argument badly formed; needs key=value" % arg)
         else:
             key, val = arg.split('=')
             kv[key] = val
@@ -451,11 +486,12 @@ class ParseDataType(argparse.Action):
         if not arg.isdigit():
             arg = arf.DataTypes._fromstring(arg)
             if arg is None:
-                raise ValueError, "%s is not a valid data type" % arg
+                raise ValueError("%s is not a valid data type" % arg)
         setattr(namespace, self.dest, int(arg))
 
 
 def arfx():
+    import datetime
 
     p = argparse.ArgumentParser(description='copy data in and out of ARF files')
     p.add_argument('entries', nargs='*')
@@ -502,6 +538,19 @@ def arfx():
                    default=1, dest='compress')
 
     args = p.parse_args()
+
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter("[%(name)s] %(message)s")
+    if args.verbose:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    log.setLevel(loglevel)
+    ch.setLevel(loglevel)  # change
+    ch.setFormatter(formatter)
+    log.addHandler(ch)
+    log.info("version: %s", __version__)
+    log.info("run time: %s", datetime.datetime.now())
 
     try:
         opts = args.__dict__.copy()

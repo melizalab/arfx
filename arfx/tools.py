@@ -14,6 +14,7 @@ class memoized(object):
    def __init__(self, func):
       self.func = func
       self.cache = {}
+      functools.update_wrapper(self, func)
 
    def __call__(self, *args):
       if not isinstance(args, collections.Hashable):

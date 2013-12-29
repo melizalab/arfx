@@ -57,7 +57,6 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
     everything happened. Creates one or more arf files to hold the data, and
     stores data under the associated entry.
 
-    verbose:    print information about what's happening
     datatype:   specify the default type of data being recorded
                 types may be specified in the explog; these have
                 precedence
@@ -224,7 +223,6 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
     entries: dictionary of onset, arf entry pairs
     sampling_rate: the sampling rate of the onset times
     table_name:  the name of the node to store the label data in
-    verbose:     if true, print debug info about matches
     """
     log.debug("Matching stimuli to entries:")
     entry_times = nx.sort(entries.keys())
@@ -263,23 +261,7 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
 
 
 def arfxplog():
-    """
-    Move data from a saber experiment into ARF format.
-
-    Usage: arfxplog [OPTIONS] <file.explog>
-
-    Options:
-     -v:              verbose output
-     -a ANIMAL:       specify the animal
-     -e EXPERIMENTER: specify the experimenter
-     -T DATATYPE:     specify the data type (integer or code)
-     -k KEY=VALUE:    specifiy additional metadata
-     --chan CHANS:    restrict to specific channels (comma-delimited)
-     -s:              generate arf file for each pen/site
-
-     --help-datatypes: display documentation on available data types
-     --version: display version information
-    """
+    """Moves data from a saber experiment into ARF format."""
     import datetime
     import argparse
 
