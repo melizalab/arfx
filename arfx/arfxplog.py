@@ -6,20 +6,24 @@ Copyright (C) 2013 Dan Meliza <dmeliza@gmail.com>
 Created Tue Jul 23 15:27:53 2013
 
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 import os
 import re
 import numpy as nx
 import logging
 
 import arf
-import arfx
-import io
-from tools import memoized
+from . import arfx
+from . import io
+from .tools import memoized
 
 # template for target file
 target_file_template = "{0}_{1}_{2}"
 # dtype for event data
-event_dtype = nx.dtype([('start', 'u8'), ('status', 'u1'), ('name', 'S256')])
+event_dtype = nx.dtype({'names': ("start", "status", "name"),
+                        'formats': ('u8', 'u1', 'S256')})
 
 _reg_create = re.compile(
     r"'(?P<file>(?P<base>\S+)_\w+.pcm_seq2)' (?P<action>created|closed)")
@@ -111,7 +115,7 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                 ifname = os.path.join(os.path.dirname(explog), fname)
                 try:
                     files[base] = io.open(ifname, mode='r')
-                except Exception, e:
+                except Exception as e:
                     log.warn("error opening source file '%s'; ARF files will be incomplete",
                              ifname)
                     log.debug(e)
@@ -187,18 +191,18 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
             else:
                 chan_datatype = datatype
 
-            arf.create_dataset(entry, name=chan, data=data,
+            dset = arf.create_dataset(entry, name=chan, data=data,
                                datatype=chan_datatype, sampling_rate=sampling_rate,
                                compression=compression,
                                source_file=ifp.filename,
-                               source_entry=ifp.entry,
-                               uuid=get_uuid(pen, site, chan))
+                               source_entry=ifp.entry)
+            arf.set_uuid(dset, get_uuid(pen, site, chan))
 
         # stimulus lines
         elif lstart == "QQQQ":
             try:
                 rel, onset, stimname = _reg_stimulus.search(line).groups()
-                lastonset = long(onset) + fileonset
+                lastonset = nx.uint64(onset) + fileonset
                 if stimname.startswith('File='):
                     stimname = stimname[5:]
                 stimuli[lastonset] = stimname
@@ -225,7 +229,7 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
     table_name:  the name of the node to store the label data in
     """
     log.debug("Matching stimuli to entries:")
-    entry_times = nx.sort(entries.keys())
+    entry_times = nx.sort(list(entries.keys()))
     # slow, but simple
     for onset in sorted(stimuli.keys()):
         stim = stimuli[onset]
@@ -254,6 +258,7 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
                 entry, table_name, event_dtype,
                 sampling_rate=sampling_rate,
                 units=units, datatype=arf.DataTypes.EVENT)
+            arf.set_uuid(stimtable, get_uuid(entry.attrs['pen'], entry.attrs['site'], table_name))
         else:
             stimtable = entry[table_name]
         arf.append_data(stimtable, (t_onset, 0x00, stim))

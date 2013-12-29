@@ -16,6 +16,10 @@
 #include "numpy/arrayobject.h"
 #include "pcmseq.h"
 
+#if PY_MAJOR_VERSION < 3
+    #define PyInt_AsLong PyLong_AsLong
+#endif
+
 typedef struct {
         PyObject_HEAD
         PCMFILE *pfp;
@@ -27,7 +31,7 @@ pcmfile_dealloc(PcmfileObject* self)
 {
         if (self->pfp)
                 pcm_close(self->pfp);
-        self->ob_type->tp_free((PyObject*)self);
+        Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 /* ctor */
@@ -62,12 +66,12 @@ pcmfile_init(PcmfileObject* self, PyObject* args, PyObject *kwds)
 
 /* methods */
 
-static PyObject*
-pcmfile_iter(PcmfileObject* self)
-{
-	return PySeqIter_New(PyObject_CallFunction((PyObject*) &PyRange_Type,
-						   "lll", 1, self->pfp->nentries+1, 1));
-}
+/* static PyObject* */
+/* pcmfile_iter(PcmfileObject* self) */
+/* { */
+/* 	return PySeqIter_New(PyObject_CallFunction((PyObject*) &PyRange_Type, */
+/* 						   "lll", 1, self->pfp->nentries+1, 1)); */
+/* } */
 
 static PyObject*
 pcmfile_nentries(PcmfileObject* self, void *closure)
@@ -136,7 +140,7 @@ pcmfile_setsamplerate(PcmfileObject* self, PyObject *value, void *closure)
                 return -1;
         }
 
-        srate = (int)PyInt_AsLong(value);
+        srate = (int) PyLong_AsLong (value);
         if (srate <= 0) {
                 PyErr_SetString(PyExc_TypeError, "Sample rate must be a positive integer");
                 return -1;
@@ -168,7 +172,7 @@ pcmfile_seek(PcmfileObject* self, PyObject* value, void *closure)
                 return -1;
         }
 
-        entry = (int)PyInt_AsLong(value);
+        entry = (int) PyLong_AsLong (value);
         if (pcm_seek(self->pfp, entry) != 0) {
                 PyErr_SetString(PyExc_ValueError, "Invalid entry");
                 return -1;
@@ -245,8 +249,7 @@ static PyMethodDef pcmfile_methods[]= {
 //static const char *pcmfile_classdoc = ;
 
 static PyTypeObject PcmfileType = {
-        PyObject_HEAD_INIT(NULL)
-        0,                             /*ob_size*/
+        PyVarObject_HEAD_INIT(NULL, 0)
         "pcmseqio.pseqfile",              /*tp_name*/
         sizeof(PcmfileObject), /*tp_basicsize*/
         0,                             /*tp_itemsize*/
@@ -280,7 +283,7 @@ static PyTypeObject PcmfileType = {
         0,                             /* tp_clear */
         0,                             /* tp_richcompare */
         0,                             /* tp_weaklistoffset */
-        pcmfile_iter,                             /* tp_iter */
+        0, //pcmfile_iter,                             /* tp_iter */
         0,                             /* tp_iternext */
         pcmfile_methods,             /* tp_methods */
         0,             /* tp_members */
@@ -299,11 +302,22 @@ static PyMethodDef _pcmseqio_methods[] = {
         {NULL}  /* Sentinel */
 };
 
-#ifndef PyMODINIT_FUNC  /* declarations for DLL import/export */
-#define PyMODINIT_FUNC void
+#if PY_MAJOR_VERSION >= 3
+static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "pcmseqio",     /* m_name */
+        "Read and write pcmseq2 files",  /* m_doc */
+        -1,                  /* m_size */
+        _pcmseqio_methods,    /* m_methods */
+        NULL,                /* m_reload */
+        NULL,                /* m_traverse */
+        NULL,                /* m_clear */
+        NULL,                /* m_free */
+    };
 #endif
-PyMODINIT_FUNC
-initpcmseqio(void)
+
+static PyObject *
+moduleinit(void)
 {
         import_array();
         PyObject* m;
@@ -315,11 +329,32 @@ initpcmseqio(void)
 
         PcmfileType.tp_new = PyType_GenericNew;
         if (PyType_Ready(&PcmfileType) < 0)
-                return;
+                return NULL;
 
+#if PY_MAJOR_VERSION >=3
+        m = PyModule_Create(&moduledef);
+#else
         m = Py_InitModule3("pcmseqio", _pcmseqio_methods,
 			   "Read and write pcmseq2 files");
+#endif
 
         Py_INCREF(&PcmfileType);
         PyModule_AddObject(m, "pseqfile", (PyObject *)&PcmfileType);
+
+        return m;
 }
+
+
+#if PY_MAJOR_VERSION < 3
+PyMODINIT_FUNC
+initpcmseqio(void)
+{
+        moduleinit();
+}
+#else
+PyMODINIT_FUNC
+PyInit_pcmseqio(void)
+{
+        return moduleinit();
+}
+#endif

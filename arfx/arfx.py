@@ -17,8 +17,9 @@ Scripts
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
 
-__version__ = "2.2.0-SNAPSHOT"
-
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 import os
 import sys
 import posixpath
@@ -26,7 +27,9 @@ import argparse
 import logging
 
 import arf
-import io
+from . import io
+
+__version__ = "2.2.0-SNAPSHOT"
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
@@ -46,10 +49,10 @@ def entry_repr(entry):
             out += ("\n  timestamp : %s" %
                     arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f"))
         elif k == 'uuid':
-            out += "\n  uuid : %s" % arf.get_uuid(entry)
+            out += "\n  uuid : %s" % v
         else:
             out += "\n  %s : %s" % (k, v)
-    for name, dset in entry.iteritems():
+    for name, dset in entry.items():
         out += "\n  /%s :" % name
         if isinstance(dset.id.get_type(), h5t.TypeVlenID):
             out += " vlarray"
@@ -136,11 +139,11 @@ def parse_name_template(node, template, index=0, default="NA"):
                 continue
             elif field == "entry":
                 if not entry:
-                    raise ValueError, "can't resolve {entry} field for %s" % node
+                    raise ValueError("can't resolve {entry} field for %s" % node)
                 values[field] = pp.basename(entry.name)
             elif field == "channel":
                 if not dset:
-                    raise ValueError, "can't resolve {channel} field for %s" % node
+                    raise ValueError("can't resolve {channel} field for %s" % node)
                 values[field] = pp.basename(dset.name)
             elif field == "index":
                 values[field] = index
@@ -158,7 +161,7 @@ def parse_name_template(node, template, index=0, default="NA"):
             return f.format(template, **values)
         else:
             return template  # no substitutions were made
-    except ValueError, e:
+    except ValueError as e:
         raise ValueError("template error: " + e.message)
 
 
@@ -170,10 +173,10 @@ def iter_entries(src, cbase='pcm'):
     fp = io.open(src, 'r')
     fbase = os.path.splitext(os.path.basename(src))[0]
     nentries = getattr(fp, 'nentries', 1)
-    for entry in xrange(nentries):
+    for entry in range(nentries):
         try:
             fp.entry = entry
-        except:
+        except AttributeError:
             pass
 
         if nentries == 1:
@@ -201,7 +204,7 @@ def add_entries(tgt, files, **options):
     chan = "pcm"                # only pcm data can be imported
 
     if len(files) == 0:
-        raise ValueError, "must specify one or more input files"
+        raise ValueError("must specify one or more input files")
 
     with arf.open_file(tgt, 'a') as arfp:
         arf.check_file_version(arfp)
@@ -255,7 +258,7 @@ def extract_entries(src, entries, **options):
     entry_base: if specified, name the output files sequentially
     """
     if not os.path.exists(src):
-        raise IOError, "the file %s does not exist" % src
+        raise IOError("the file %s does not exist" % src)
 
     if len(entries) == 0:
         entries = None
@@ -300,7 +303,7 @@ def delete_entries(src, entries, **options):
     repack: if True (default), repack the file afterward to reclaim space
     """
     if not os.path.exists(src):
-        raise IOError, "the file %s does not exist" % src
+        raise IOError("the file %s does not exist" % src)
     if entries is None or len(entries) == 0:
         return
 
@@ -313,7 +316,7 @@ def delete_entries(src, entries, **options):
                     del arfp[entry]
                     count += 1
                     log.debug("deleted /%s", entry)
-                except Exception, e:
+                except Exception as e:
                     log.error("unable to delete %s: %s", entry, e)
             else:
                 log.debug("unable to delete %s: no such entry", entry)
@@ -329,7 +332,7 @@ def copy_entries(tgt, files, **options):
 
     entry_base: if specified, rename entries sequentially in target file
     """
-    from tools import memoized
+    from .tools import memoized
     from h5py import Group
     ebase = options.get('template', None)
     acache = memoized(arf.open_file)
@@ -374,7 +377,7 @@ def list_entries(src, entries, **options):
     """
     if not os.path.exists(src):
         raise IOError("the file %s does not exist" % src)
-    print "%s:" % src
+    print("%s:" % src)
     with arf.open_file(src, 'r') as arfp:
         try:
             arf.check_file_version(arfp)
@@ -390,8 +393,7 @@ def list_entries(src, entries, **options):
                 if options.get('verbose', False):
                     print(entry_repr(entry))
                 else:
-                    print("%s: %d channel%s" % (entry.name, len(entry),
-                                                arf.pluralize(len(entry))))
+                    print("%s: %d channel%s" % (entry.name, len(entry), pluralize(len(entry))))
         else:
             for ename in entries:
                 if ename in arfp:
@@ -406,11 +408,11 @@ def update_entries(src, entries, **options):
              name parameter is set, the entries are renamed sequentially
     """
     if not os.path.exists(src):
-        raise IOError, "the file %s does not exist" % src
+        raise IOError("the file %s does not exist" % src)
     ebase = options.get('template', None)
     if (entries is None or len(entries) == 0) and ebase is not None:
         if ebase.find('{') < 0:
-            raise ValueError, "with multiple entries, template needs to have {} formatter fields"
+            raise ValueError("with multiple entries, template needs to have {} formatter fields")
     metadata = options.get('attrs', None) or dict()
     if 'datatype' in options:
         metadata['datatype'] = options['datatype']
@@ -556,10 +558,11 @@ def arfx():
         opts = args.__dict__.copy()
         entries = opts.pop('entries')
         args.op(args.arffile, entries, **opts)
-    except Exception, e:
-        print >> sys.stderr, "arfx: error: %s" % e
+    except Exception as e:
+        raise
+        print("arfx: error: %s" % e)
         if isinstance(e, DeprecationWarning):
-            print >> sys.stderr, "      use arfx --upgrade to convert to version %s" % arf.spec_version
+            print ("      use arfx --upgrade to convert to version %s" % arf.spec_version)
         sys.exit(-1)
     return 0
 

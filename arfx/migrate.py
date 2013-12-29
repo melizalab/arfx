@@ -7,7 +7,9 @@ Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-04-06
 """
 
-import sys
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 import h5py as hp
 import arf
 from . import h5vlen
