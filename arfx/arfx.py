@@ -38,13 +38,15 @@ default_entry_template = "{base}_{index:04}"
 
 log = logging.getLogger('arfx')   # root logger
 
+
 def entry_repr(entry):
     from h5py import h5t
     attrs = entry.attrs
     datatypes = arf.DataTypes._todict()
     out = "%s" % (entry.name)
     for k, v in attrs.items():
-        if k.isupper(): continue
+        if k.isupper():
+            continue
         if k == 'timestamp':
             out += ("\n  timestamp : %s" %
                     arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -64,8 +66,10 @@ def entry_repr(entry):
                 out += " (compound type)"
 
         out += ", units '%s'" % dset.attrs.get('units', '')
-        out += ", type %s"  % datatypes[dset.attrs.get('datatype', arf.DataTypes.UNDEFINED)]
-        if dset.compression: out += " [%s%d]" % (dset.compression, dset.compression_opts)
+        out += ", type %s" % datatypes[dset.attrs.get('datatype',
+                                                      arf.DataTypes.UNDEFINED)]
+        if dset.compression:
+            out += " [%s%d]" % (dset.compression, dset.compression_opts)
     return out
 
 
@@ -139,11 +143,13 @@ def parse_name_template(node, template, index=0, default="NA"):
                 continue
             elif field == "entry":
                 if not entry:
-                    raise ValueError("can't resolve {entry} field for %s" % node)
+                    raise ValueError(
+                        "can't resolve {entry} field for %s" % node)
                 values[field] = pp.basename(entry.name)
             elif field == "channel":
                 if not dset:
-                    raise ValueError("can't resolve {channel} field for %s" % node)
+                    raise ValueError(
+                        "can't resolve {channel} field for %s" % node)
                 values[field] = pp.basename(dset.name)
             elif field == "index":
                 values[field] = index
@@ -208,8 +214,9 @@ def add_entries(tgt, files, **options):
 
     with arf.open_file(tgt, 'a') as arfp:
         arf.check_file_version(arfp)
-        arf.set_attributes(arfp, file_creator="org.meliza.arfx/arfx " + __version__,
-                           overwrite=False)
+        arf.set_attributes(
+            arfp, file_creator="org.meliza.arfx/arfx " + __version__,
+            overwrite=False)
         for f in files:
             for fp, entry_index, entry_name in iter_entries(f):
                 timestamp = getattr(fp, 'timestamp', None)
@@ -221,15 +228,17 @@ def add_entries(tgt, files, **options):
                         raise ValueError("%s/%d missing required timestamp" %
                                          (f, entry_index))
                 if not hasattr(fp, 'sampling_rate'):
-                    raise ValueError("%s/%d missing required sampling_rate attribute" %
-                                     (f, entry_index))
+                    raise ValueError(
+                        "%s/%d missing required sampling_rate attribute" %
+                        (f, entry_index))
 
                 if ebase is not None:
                     entry_name = default_entry_template.format(
                         base=ebase,
                         index=arf.count_children(arfp, Group))
                 entry = arf.create_entry(arfp, entry_name, timestamp,
-                                         entry_creator="org.meliza.arfx/arfx " + __version__,
+                                         entry_creator="org.meliza.arfx/arfx " +
+                                         __version__,
                                          **metadata)
                 arf.create_dataset(entry, chan, fp.read(),
                                    datatype=datatype,
@@ -285,7 +294,8 @@ def extract_entries(src, entries, **options):
                                                 index=index)
                     dtype, stype, ncols = dataset_properties(dset)
                     if dtype != 'sampled':
-                        log.debug("%s -> skipped (no supported containers)", dset.name)
+                        log.debug(
+                            "%s -> skipped (no supported containers)", dset.name)
                         continue
 
                     with io.open(fname, 'w', **attrs) as fp:
@@ -393,7 +403,8 @@ def list_entries(src, entries, **options):
                 if options.get('verbose', False):
                     print(entry_repr(entry))
                 else:
-                    print("%s: %d channel%s" % (entry.name, len(entry), pluralize(len(entry))))
+                    print("%s: %d channel%s" %
+                          (entry.name, len(entry), pluralize(len(entry))))
         else:
             for ename in entries:
                 if ename in arfp:
@@ -412,7 +423,8 @@ def update_entries(src, entries, **options):
     ebase = options.get('template', None)
     if (entries is None or len(entries) == 0) and ebase is not None:
         if ebase.find('{') < 0:
-            raise ValueError("with multiple entries, template needs to have {} formatter fields")
+            raise ValueError(
+                "with multiple entries, template needs to have {} formatter fields")
     metadata = options.get('attrs', None) or dict()
     if 'datatype' in options:
         metadata['datatype'] = options['datatype']
@@ -475,7 +487,8 @@ class ParseKeyVal(argparse.Action):
         if kv is None:
             kv = dict()
         if not arg.count('=') == 1:
-            raise ValueError("-k %s argument badly formed; needs key=value" % arg)
+            raise ValueError(
+                "-k %s argument badly formed; needs key=value" % arg)
         else:
             key, val = arg.split('=')
             kv[key] = val
@@ -495,7 +508,8 @@ class ParseDataType(argparse.Action):
 def arfx():
     import datetime
 
-    p = argparse.ArgumentParser(description='copy data in and out of ARF files')
+    p = argparse.ArgumentParser(
+        description='copy data in and out of ARF files')
     p.add_argument('entries', nargs='*')
     p.add_argument('--version', action='version',
                    version='%(prog)s ' + __version__)
@@ -520,8 +534,9 @@ def arfx():
                    action='store_const', dest='op', const=update_entries)
     g.add_argument('-d', help='delete entries',
                    action='store_const', dest='op', const=delete_entries)
-    g.add_argument('--upgrade', help="migrate older ARF versions to %s" % __version__,
-                   action='store_const', dest='op', const=upgrade_file)
+    g.add_argument(
+        '--upgrade', help="migrate older ARF versions to %s" % __version__,
+        action='store_const', dest='op', const=upgrade_file)
 
     g = p.add_argument_group('Options')
     g.add_argument('-f', help='the ARF file to operate on', required=True,
@@ -532,12 +547,15 @@ def arfx():
                    metavar='TEMPLATE', dest='template')
     g.add_argument('-T', help='specify data type (see --help-datatypes)',
                    default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype', action=ParseDataType)
-    g.add_argument('-k', help='specify attributes of entries', action=ParseKeyVal,
-                   metavar="KEY=VALUE", dest='attrs')
-    g.add_argument('-P', help="don't repack when deleting entries", action='store_false',
-                   dest='repack')
-    g.add_argument('-z', help="set compression level in ARF (default: %(default)s)", type=int,
-                   default=1, dest='compress')
+    g.add_argument(
+        '-k', help='specify attributes of entries', action=ParseKeyVal,
+        metavar="KEY=VALUE", dest='attrs')
+    g.add_argument(
+        '-P', help="don't repack when deleting entries", action='store_false',
+        dest='repack')
+    g.add_argument(
+        '-z', help="set compression level in ARF (default: %(default)s)", type=int,
+        default=1, dest='compress')
 
     args = p.parse_args()
 
@@ -562,7 +580,8 @@ def arfx():
         raise
         print("arfx: error: %s" % e)
         if isinstance(e, DeprecationWarning):
-            print ("      use arfx --upgrade to convert to version %s" % arf.spec_version)
+            print("      use arfx --upgrade to convert to version %s" %
+                  arf.spec_version)
         sys.exit(-1)
     return 0
 

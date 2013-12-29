@@ -34,6 +34,7 @@ _reg_stimulus = re.compile(
 
 log = logging.getLogger('arfxplog')   # root logger
 
+
 @memoized
 def get_uuid(pen, site, channel):
     """Returns a random uuid for a recording site/channel"""
@@ -47,10 +48,12 @@ def get_uuid(pen, site, channel):
 def get_dest_arf(filename, dry_run):
     """Returns handle for destination arf file"""
     if dry_run:
-        fp = arf.open_file(filename + ".arf", mode="a", driver="core", backing_store=False)
+        fp = arf.open_file(filename + ".arf", mode="a",
+                           driver="core", backing_store=False)
     else:
         fp = arf.open_file(filename + ".arf", mode="w-")
-        arf.set_attributes(fp, file_creator='org.meliza.arfx/arfxplog ' + arfx.__version__)
+        arf.set_attributes(
+            fp, file_creator='org.meliza.arfx/arfxplog ' + arfx.__version__)
         log.info("opened '%s.arf' for writing", filename)
     return fp
 
@@ -100,7 +103,8 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                             arf.DataTypes, props['datatype'].upper())
                     dset_attrs[fields[0]] = props
                 except (AttributeError, ValueError):
-                    log.warn("L%d parse error: bad channel metadata: ignoring", line_num)
+                    log.warn(
+                        "L%d parse error: bad channel metadata: ignoring", line_num)
 
         # file creation
         elif lstart == "FFFF":
@@ -116,8 +120,9 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                 try:
                     files[base] = io.open(ifname, mode='r')
                 except Exception as e:
-                    log.warn("error opening source file '%s'; ARF files will be incomplete",
-                             ifname)
+                    log.warn(
+                        "error opening source file '%s'; ARF files will be incomplete",
+                        ifname)
                     log.debug(e)
             else:
                 # file was closed; remove from list
@@ -145,23 +150,26 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
             try:
                 ifp = files[chan]
             except KeyError:
-                # user should already have been warned about missing data from this file
+                # user should already have been warned about missing data from
+                # this file
                 continue
             try:
                 ifp.entry = int(entry)
             except ValueError:
                 log.warn("L%d runtime error: unable to access %s/%d", line_num,
-                            int(entry), chan)
+                         int(entry), chan)
                 continue
             lastonset = nx.uint64(onset) + fileonset
             entry_name = "e%ld" % lastonset
-            ofname = target_file_template.format(base, pen, site) if split_sites else base
+            ofname = target_file_template.format(
+                base, pen, site) if split_sites else base
             try:
                 ofp = get_dest_arf(ofname, dry_run)
             except IOError:
                 log.error("target file '%s' already exists; aborting", ofname)
                 return -1
-            log.debug("%s/%s -> %s/%s/%s", ifp.filename, entry, ofp.filename, entry_name, chan)
+            log.debug("%s/%s -> %s/%s/%s", ifp.filename,
+                      entry, ofp.filename, entry_name, chan)
             data = ifp.read()
             sampling_rate = ifp.sampling_rate
 
@@ -182,7 +190,8 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                     ifp.timestamp,
                     sample_count=lastonset,
                     sampling_rate=sampling_rate,
-                    entry_creator='org.meliza.arfx/arfxplog ' + arfx.__version__,
+                    entry_creator='org.meliza.arfx/arfxplog ' +
+                    arfx.__version__,
                     pen=pen, site=site, **entry_attrs)
                 entries[lastonset] = entry
 
@@ -192,10 +201,10 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                 chan_datatype = datatype
 
             dset = arf.create_dataset(entry, name=chan, data=data,
-                               datatype=chan_datatype, sampling_rate=sampling_rate,
-                               compression=compression,
-                               source_file=ifp.filename,
-                               source_entry=ifp.entry)
+                                      datatype=chan_datatype, sampling_rate=sampling_rate,
+                                      compression=compression,
+                                      source_file=ifp.filename,
+                                      source_entry=ifp.entry)
             arf.set_uuid(dset, get_uuid(pen, site, chan))
 
         # stimulus lines
@@ -258,7 +267,8 @@ def match_stimuli(stimuli, entries, sampling_rate, table_name='stimuli'):
                 entry, table_name, event_dtype,
                 sampling_rate=sampling_rate,
                 units=units, datatype=arf.DataTypes.EVENT)
-            arf.set_uuid(stimtable, get_uuid(entry.attrs['pen'], entry.attrs['site'], table_name))
+            arf.set_uuid(
+                stimtable, get_uuid(entry.attrs['pen'], entry.attrs['site'], table_name))
         else:
             stimtable = entry[table_name]
         arf.append_data(stimtable, (t_onset, 0x00, stim))
@@ -270,11 +280,13 @@ def arfxplog():
     import datetime
     import argparse
 
-    p = argparse.ArgumentParser(description="Move data from a saber experiment into ARF format",)
+    p = argparse.ArgumentParser(
+        description="Move data from a saber experiment into ARF format",)
     p.add_argument('--version', action='version',
                    version='%(prog)s ' + arfx.__version__)
-    p.add_argument('--dry-run', help="parse the explog but don't save the data to disk",
-                   action="store_true")
+    p.add_argument(
+        '--dry-run', help="parse the explog but don't save the data to disk",
+        action="store_true")
     p.add_argument('--help-datatypes',
                    help='print available datatypes and exit',
                    action='version', version=arf.DataTypes._doc())
@@ -283,16 +295,19 @@ def arfxplog():
     p.add_argument('-T', help='specify data type (see --help-datatypes)',
                    default=arf.DataTypes.UNDEFINED, metavar='DATATYPE',
                    dest='datatype', action=arfx.ParseDataType)
-    p.add_argument('-k', help='specify attributes of entries', action=arfx.ParseKeyVal,
-                   metavar="KEY=VALUE", dest='attrs', default={})
+    p.add_argument(
+        '-k', help='specify attributes of entries', action=arfx.ParseKeyVal,
+        metavar="KEY=VALUE", dest='attrs', default={})
     p.add_argument('-s', help="generate arf file for each pen/site",
                    action="store_true", dest='split')
-    p.add_argument('-a', help="specify the animal in the experiment", dest='animal')
+    p.add_argument('-a', help="specify the animal in the experiment",
+                   dest='animal')
     p.add_argument('-e', help="specify the experimenter", dest='experimenter')
     p.add_argument('-z', help="compression level (0-9)", type=int, default=1,
                    dest="compression")
-    p.add_argument('--chan', help='restrict to specific channels (comma-delimited list)',
-                   dest="channels")
+    p.add_argument(
+        '--chan', help='restrict to specific channels (comma-delimited list)',
+        dest="channels")
     p.add_argument("explog", help="explog generated by saber (note: pcm_seq2 files must "
                    "be in the same directory)")
 
@@ -319,9 +334,10 @@ def arfxplog():
     opts.attrs['animal'] = opts.animal
     opts.attrs['experimenter'] = opts.experimenter
 
-    return parse_explog(opts.explog, opts.attrs, opts.datatype, split_sites=opts.split,
-                        compression=opts.compression, channels=opts.channels,
-                        dry_run=opts.dry_run)
+    return parse_explog(
+        opts.explog, opts.attrs, opts.datatype, split_sites=opts.split,
+        compression=opts.compression, channels=opts.channels,
+        dry_run=opts.dry_run)
 
 # Variables:
 # End:

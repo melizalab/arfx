@@ -11,6 +11,7 @@ from __future__ import division
 from __future__ import unicode_literals
 from ewave import rescale
 
+
 class pcmfile(object):
 
     def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
@@ -38,7 +39,8 @@ class pcmfile(object):
         self._nchannels = int(nchannels)
         self._framerate = int(sampling_rate)
         if not nchannels == 1:
-            raise ValueError("More than one channel not supported by this format")
+            raise ValueError(
+                "More than one channel not supported by this format")
 
         if hasattr(file, 'read'):
             self.fp = file

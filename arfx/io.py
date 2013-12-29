@@ -12,6 +12,7 @@ from __future__ import division
 from __future__ import unicode_literals
 _entrypoint = 'arfx.io'
 
+
 def open(filename, *args, **kwargs):
     """Open a file and return an appropriate object, based on extension.
 
