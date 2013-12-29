@@ -462,14 +462,10 @@ def repack_file(path, **options):
         cmd += "-f SHUF -f GZIP=%d " % compress
     try:
         tdir = mkdtemp()
-        if options['verbose']:
-            sys.stdout.write("Repacking %s..." % path)
-            sys.stdout.flush()
+        log.info("Repacking %s", path)
         fdir, fbase = os.path.split(path)
         os.system(cmd + path + " " + os.path.join(tdir, fbase))
         copy(os.path.join(tdir, fbase), path)
-        if options['verbose']:
-            sys.stdout.write("done\n")
     finally:
         rmtree(tdir)
 

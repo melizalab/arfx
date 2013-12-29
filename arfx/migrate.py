@@ -11,9 +11,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import unicode_literals
 import h5py as hp
+import logging
 import arf
-from . import h5vlen
 from distutils.version import StrictVersion
+
+from . import h5vlen
+
+log = logging.getLogger('arfx.migrate')   # root logger
 
 
 def unpickle_attrs(attrs, old_attrs=None):
@@ -35,13 +39,13 @@ def unpickle_attrs(attrs, old_attrs=None):
             try:
                 val = loads(v)
             except:
-                print "error unpickling attribute %s (%s)" % (k, v)
+                log.error("error unpickling attribute %s (%s)", k, v)
                 continue
 
             try:
                 attrs[k] = val
             except:
-                print "error storing pickled attribute %s" % (k, v)
+                log.error("error storing pickled attribute %s", k, v)
                 attrs[k] = v
 
 
@@ -60,11 +64,11 @@ def cvt_11(afp, **kwargs):
     """
     _catalogname = "catalog"
 
-    print "* Upgrading %s to 1.1" % afp.filename
+    log.info("Upgrading %s to 1.1", afp.filename)
     recuri = afp.attrs.get('database_uri', None)
 
     ecat = afp[_catalogname][::]
-    print "** Upgrading entries"
+    log.info("Upgrading entries")
     for r in ecat:
         entry = afp[r['name']]
         for k in ('recid', 'animal', 'experimenter', 'protocol'):
@@ -80,14 +84,14 @@ def cvt_11(afp, **kwargs):
             entry.attrs['recuri'] = recuri
 
         if not _catalogname in entry:
-            print "** %s doesn't have a catalog: already upgraded?" % entry.name
+            log.warn("%s doesn't have a catalog: already upgraded?", entry.name)
             continue
         if not len(entry) > 1:
-            print "** %s appears to be empty" % entry.name
+            log.warn("%s appears to be empty", entry.name)
             del entry[_catalogname]
             continue
         ccat = entry[_catalogname][::]
-        print "** Upgrading datasets for %s:" % entry.name
+        log.info("Upgrading datasets for %s:", entry.name)
         # first rename all old nodes to avoid collisions
         old_nodes = set()
         for dset_name in entry.keys():
@@ -106,13 +110,13 @@ def cvt_11(afp, **kwargs):
             dtype, stype, ncol = arf.dataset_properties(old_dset)
             if dtype == 'event' and stype == 'vlarray':
                 # vlarrays are converted to regular arrays
-                print "    %s/%d (vlarray) -> %s" % (node_name, rr['column'], rr['name'])
+                log.info("    %s/%d (vlarray) -> %s", node_name, rr['column'], rr['name'])
                 data = h5vlen.read(old_dset)[rr['column']]
                 new_dset = entry.create_dataset(rr['name'], data=data,
                                                 maxshape=None, chunks=True, compression=False)
             elif dtype == 'sampled' and ncol > 1:
                 # multi-column datasets are split
-                print "    %s/%d (ndarray) -> %s" % (node_name, rr['column'], rr['name'])
+                log.info("    %s/%d (ndarray) -> %s", (node_name, rr['column'], rr['name']))
                 data = old_dset[:, rr['column']]
                 sampling_rate = old_dset.attrs['sampling_rate']
                 # don't compress until file is repacked
@@ -122,20 +126,20 @@ def cvt_11(afp, **kwargs):
 
             else:
                 # all other datatypes can simply be renamed
-                print "    %s (%s) -> %s" % (node_name, dtype, rr['name'])
+                log.info("    %s (%s) -> %s", node_name, dtype, rr['name'])
                 new_dset = entry[rr['name']] = old_dset
 
             arf.set_attributes(new_dset, datatype=datatype, units=rr['units'])
             unpickle_attrs(new_dset.attrs, old_dset.attrs)
 
-        print "    Removing old datasets"
+        log.info("    Removing old datasets")
         for n in old_nodes:
             del entry[n]
         unpickle_attrs(entry.attrs)
 
-    print "** Removing top-level catalog"
+    log.info("Removing top-level catalog")
     del afp[_catalogname]
-    print "** Fixing top-level attributes"
+    log.info("Fixing top-level attributes")
     afp.attrs['arf_version'] = '1.1'
     if 'database_class' in afp.attrs:
         del afp.attrs['database_class']
@@ -157,19 +161,18 @@ _pytables_attributes = \
 
 def cvt_11_20(afp, **kwargs):
     """ convert a version 1.1 ARF file to version 2.0 """
-    from uuid import uuid4
 
     pyt_attr_names = set(k for v in _pytables_attributes.values()
                          for k in v.keys())
 
     sampling_rate = kwargs.get("sampling_rate", None)
 
-    print "* Upgrading %s to 2.0" % afp.filename
+    log.info("Upgrading %s to 2.0", afp.filename)
 
     for ename, entry in afp.items():
-        print "** Upgrading attributes for", ename
+        log.info("Upgrading attributes for %s", ename)
         if "uuid" not in entry.attrs:
-            print "*** Adding uuid"
+            log.info("Adding uuid")
             arf.set_uuid(entry)
         for k in entry.attrs:
             if k in pyt_attr_names:
@@ -181,11 +184,11 @@ def cvt_11_20(afp, **kwargs):
                     del dset.attrs[k]
             if "units" in dset.attrs and dset.attrs["units"] == "samples" and "sampling_rate" not in dset.attrs:
                 if sampling_rate is None:
-                    raise ValueError, "need sampling rate for %s; supply as metadata" % dset.name
-                print "*** Adding sampling rate to %s" % dname
+                    raise ValueError("need sampling rate for %s; supply as metadata" % dset.name)
+                log.info("Adding sampling rate to %s", dname)
                 dset.attrs['sampling_rate'] = float(sampling_rate)
 
-    print "** Fixing top-level attributes"
+    log.info("Fixing top-level attributes")
     for k in afp.attrs:
         if k in pyt_attr_names:
             del afp.attrs[k]
@@ -204,10 +207,14 @@ def migrate_file(path, newname=None, **kwargs):
 
     fp = hp.File(path, 'r+')
     for v, f in converters:
-        file_version = StrictVersion(fp.attrs.get('arf_version', "0.9"))
+        try:
+            file_version = arf.check_file_version(fp)
+        except DeprecationWarning:
+            pass
         if file_version < v:
             f(fp, **kwargs)
-    print "* %s is up to date" % path
+    file_version = arf.check_file_version(fp)
+    log.info("%s is up to date (%s)", path, file_version)
     fp.close()
 
 # Variables:
