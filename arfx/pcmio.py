@@ -6,16 +6,18 @@ Read and write PCM format files.
 Copyright (C) 2012 Dan Meliza <dan // AT // meliza.org>
 Created 2012-03-29
 """
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 from ewave import rescale
-
 
 class pcmfile(object):
 
-    def __init__(self, f, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
-        """ Open a file for reading and/or writing. Any of the standard modes
+    def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
+        """Opens file for reading and/or writing. Any of the standard modes
         supported by file can be used.
 
-        f:             the path of the file to open, or an open file-like object
+        file:          the path of the file to open, or an open file-like object
         mode:          the mode to open the file. if already open, uses the file's handle
         sampling_rate: set the sampling rate of the data. this has no effect on the file.
         dtype:         set the storage format (i.e. how the data will be read)
@@ -25,27 +27,35 @@ class pcmfile(object):
 
         additional keyword arguments are ignored
         """
+        import sys
+        if sys.version > '3':
+            from builtins import open
+        else:
+            from __builtin__ import open
         from numpy import dtype as ndtype
-        # validate arguments; props are overwritten if header is read
+        # validate arguments
         self._dtype = ndtype(dtype)
         self._nchannels = int(nchannels)
         self._framerate = int(sampling_rate)
-
         if not nchannels == 1:
-            raise ValueError, "More than one channel not supported by this format"
+            raise ValueError("More than one channel not supported by this format")
 
-        if isinstance(f, basestring):
-            if mode not in ('r', 'r+', 'w', 'w+'):
-                raise ValueError, "Invalid mode (use 'r', 'r+', 'w', 'w+')"
-            self.fp = file(f, mode=mode + 'b')
+        if hasattr(file, 'read'):
+            self.fp = file
         else:
-            self.fp = f
+            try:
+                file = file.encode(sys.getfilesystemencoding())
+            except (UnicodeError, LookupError):
+                pass
+            if mode not in ('r', 'r+', 'w', 'w+'):
+                raise ValueError("Invalid mode (use 'r', 'r+', 'w', 'w+')")
+            self.fp = open(file, mode=mode + 'b')
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.flush()
+        self.fp.close()
         return exc_val
 
     @property
@@ -56,8 +66,7 @@ class pcmfile(object):
     @property
     def mode(self):
         """ The mode for the file """
-        m = self.fp.mode
-        return m[:m.find('b')]
+        return self.fp.mode.replace('b', '')
 
     @property
     def sampling_rate(self):
@@ -82,13 +91,14 @@ class pcmfile(object):
         return self._dtype
 
     def __repr__(self):
-        return "<open %s.%s '%s', mode '%s', dtype '%s', sampling rate %d at %s>" % (self.__class__.__module__,
-                                                                                     self.__class__.__name__,
-                                                                                     self.filename,
-                                                                                     self.mode,
-                                                                                     self.dtype,
-                                                                                     self.sampling_rate,
-                                                                                     hex(id(self)))
+        return "<open %s.%s '%s', mode '%s', dtype '%s', sampling rate %d at %s>" % \
+            (self.__class__.__module__,
+             self.__class__.__name__,
+             self.filename,
+             self.mode,
+             self.dtype,
+             self.sampling_rate,
+             hex(id(self)))
 
     def flush(self):
         """ flush data to disk """
@@ -112,8 +122,8 @@ class pcmfile(object):
         from numpy import memmap as mmap
         from numpy import fromfile
         if self.mode == 'w':
-            raise IOError, 'file is write-only'
-        if self.mode == 'r+':
+            raise IOError('file is write-only')
+        if self.mode in ('r+', 'w+'):
             self.fp.flush()
         # find offset
         if frames is None:
@@ -147,7 +157,7 @@ class pcmfile(object):
         """
         from numpy import asarray
         if self.mode == 'r':
-            raise IOError, 'file is read-only'
+            raise IOError('file is read-only')
 
         if not scale:
             data = asarray(data, self._dtype)
