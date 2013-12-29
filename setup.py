@@ -26,15 +26,14 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.1.0-SNAPSHOT'
+VERSION = '2.2.0-SNAPSHOT'
 
 cls_txt = """
 Development Status :: 5 - Production/Stable
 Intended Audience :: Science/Research
 License :: OSI Approved :: GNU General Public License (GPL)
 Programming Language :: Python
-Programming Language :: C++
-Programming Language :: MATLAB
+Programming Language :: Python :: 3
 Topic :: Scientific/Engineering
 Operating System :: Unix
 Operating System :: POSIX :: Linux
@@ -57,7 +56,7 @@ compiler_settings = {
 if sys.platform == 'darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
 
-requirements = ["arf==2.1.0", "ewave==1.0.3"]
+requirements = ["arf>=2.2", "ewave>=1.0.4"]
 if sys.hexversion < 0x02070000:
     requirements.append("argparse==1.2.1")
 
