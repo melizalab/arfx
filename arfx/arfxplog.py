@@ -205,6 +205,10 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                                       compression=compression,
                                       source_file=ifp.filename,
                                       source_entry=ifp.entry)
+            # store duration of longest dataset; could also get this from
+            # TRIG_OFF line, but this is a bit simpler.
+            if data.size > entry.attrs.get('trial_off', 0):
+                entry.attrs['trial_off'] = data.size
             arf.set_uuid(dset, get_uuid(pen, site, chan))
 
         # stimulus lines

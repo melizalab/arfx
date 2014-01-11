@@ -154,5 +154,4 @@ the property if `nentries` is 1.
 ### version information
 
 **arfx** uses semantic versioning and is synchronized with the major/minor version
-numbers of the ARF specification. It is currently in pre-release alpha. It will
-be finalized when the specification for ARF version 2.0 is frozen.
+numbers of the arf package specification.
