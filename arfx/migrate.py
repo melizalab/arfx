@@ -154,9 +154,9 @@ _pytables_attributes = \
                   CLASS='GROUP', PYTABLES_FORMAT_VERSION='2.0'),
         group=dict(TITLE='', VERSION='1.0', CLASS='GROUP'),
         carray=dict(TITLE='', VERSION='1.0', CLASS='CARRAY'),
-        earray=dict(TITLE='', VERSION='1.3', CLASS='EARRAY', EXTDIM=1),
+        earray=dict(TITLE='', VERSION='1.3', CLASS='EARRAY', EXTDIM=1, FILTERS=1),
         vlarray=dict(TITLE='', VERSION='1.3', CLASS='VLARRAY'),
-        table=dict(TITLE='', VERSION='2.6', CLASS='TABLE'))  # also need field names
+        table=dict(TITLE='', VERSION='2.6', CLASS='TABLE', NROWS=1))  # also need field names
 
 
 def cvt_11_20(afp, **kwargs):
@@ -180,13 +180,24 @@ def cvt_11_20(afp, **kwargs):
 
         for dname, dset in entry.items():
             for k in dset.attrs:
-                if k in pyt_attr_names:
+                # add a special case for table attributes
+                if k in pyt_attr_names or k.startswith('FIELD'):
                     del dset.attrs[k]
-            if "units" in dset.attrs and dset.attrs["units"] == "samples" and "sampling_rate" not in dset.attrs:
+            if "units" in dset.attrs and dset.attrs["units"] == "samples" \
+               and "sampling_rate" not in dset.attrs:
                 if sampling_rate is None:
                     raise ValueError("need sampling rate for %s; supply as metadata" % dset.name)
                 log.info("Adding sampling rate to %s", dname)
                 dset.attrs['sampling_rate'] = float(sampling_rate)
+
+            # fix empty dimensions and otherwise repack datasets
+            data = dset[:]
+            if len(data.shape) > 1:
+                data = data.squeeze()
+            dset_sq = entry.create_dataset(None, data=data, chunks=True)
+            arf.set_attributes(dset_sq, **dset.attrs)
+            del entry[dname]
+            entry[dname] = dset_sq
 
     log.info("Fixing top-level attributes")
     for k in afp.attrs:
