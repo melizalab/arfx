@@ -9,9 +9,15 @@ on [HDF5](http://www.hdfgroup.org/HDF5).
 
 -   Python 2.6+ or 3.2+
 -   arf 2.2+ (<https://github.com/dmeliza/arf>)
--   ewave 1.0.3+ (<https://github.com/dmeliza/py-ewave>)
+-   ewave 1.0.4+ (<https://github.com/dmeliza/py-ewave>)
 
 ### installation
+
+```bash
+pip install arfx
+```
+
+or from source:
 
 ```bash
 python setup.py install
@@ -106,9 +112,9 @@ and to rename entries (if the `-n` flag is set).
 ### extending arfx
 
 Additional formats for reading and writing can be added using the Python
-distribute package's plugin system (see <http://pythonhosted.org/distribute/>).
-Plugins must be registered in the `arfx.io` entry point group, with a name
-corresponding to the extension of the file format handled by the plugin.
+setuptools plugin system. Plugins must be registered in the `arfx.io` entry
+point group, with a name corresponding to the extension of the file format
+handled by the plugin.
 
 An arfx IO plugin is a class with the following required methods:
 
@@ -155,3 +161,5 @@ the property if `nentries` is 1.
 
 **arfx** uses semantic versioning and is synchronized with the major/minor version
 numbers of the arf package specification.
+
+[![Build Status](https://travis-ci.org/melizalab/arfx.png?branch=master)](https://travis-ci.org/melizalab/arfx)
