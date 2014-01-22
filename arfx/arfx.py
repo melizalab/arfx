@@ -29,7 +29,7 @@ import logging
 import arf
 from . import io
 
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
@@ -455,17 +455,21 @@ def repack_file(path, **options):
     """ Call h5repack on a list of files to repack them """
     from shutil import rmtree, copy
     from tempfile import mkdtemp
+    from subprocess import call
 
-    cmd = '/usr/bin/env h5repack '
+    cmd = ['/usr/bin/env', 'h5repack']
     compress = options.get('compress', False)
     if compress:
-        cmd += "-f SHUF -f GZIP=%d " % compress
+        cmd.extend(("-f", "SHUF", "-f", "GZIP=%d" % compress))
     try:
         tdir = mkdtemp()
         log.info("Repacking %s", path)
         fdir, fbase = os.path.split(path)
-        os.system(cmd + path + " " + os.path.join(tdir, fbase))
-        copy(os.path.join(tdir, fbase), path)
+        retcode = call(cmd + [path, os.path.join(tdir, fbase)])
+        if retcode == 0:
+            copy(os.path.join(tdir, fbase), path)
+        else:
+            log.error("Failed to repack file: keeping original.")
     finally:
         rmtree(tdir)
 

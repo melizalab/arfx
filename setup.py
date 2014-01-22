@@ -26,7 +26,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.2.1'
+VERSION = '2.2.2'
 
 cls_txt = """
 Development Status :: 5 - Production/Stable
