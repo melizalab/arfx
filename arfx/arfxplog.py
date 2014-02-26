@@ -73,6 +73,8 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
     entries.
 
     """
+    # base for created files
+    arfbase = os.path.splitext(explog)[0]
     # look up source pcmseq2 file by channel name
     files = {}
     # dict of stimuli indexed by samplecount
@@ -162,7 +164,7 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
             lastonset = nx.uint64(onset) + fileonset
             entry_name = "e%ld" % lastonset
             ofname = target_file_template.format(
-                base, pen, site) if split_sites else base
+                arfbase, pen, site) if split_sites else base
             try:
                 ofp = get_dest_arf(ofname, dry_run)
             except IOError:
