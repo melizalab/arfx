@@ -58,7 +58,7 @@ if sys.platform == 'darwin':
 
 requirements = ["arf>=2.2", "ewave>=1.0.4"]
 if sys.hexversion < 0x02070000:
-    requirements.append("argparse==1.2.1")
+    requirements.append("argparse")
 
 setup(
     name='arfx',
