@@ -51,11 +51,12 @@ entry, which is a set of data channels that all start at the same time.
 """
 
 import pkgconfig
-compiler_settings = {
-    'include_dirs': [pkgconfig.cflags("hdf5"), numpy.get_include()],
-}
+compiler_settings = pkgconfig.parse("hdf5")
+compiler_settings['include_dirs'].add(numpy.get_include())
 if sys.platform == 'darwin':
-    compiler_settings['include_dirs'] += ['/opt/local/include']
+    compiler_settings['include_dirs'].add('/opt/local/include')
+compiler_settings = {k:list(v) for k,v in compiler_settings.items()}
+
 
 requirements = ["arf>=2.2", "ewave>=1.0.4"]
 if sys.hexversion < 0x02070000:
@@ -79,7 +80,7 @@ setup(
                            **compiler_settings),
                  Extension('arfx.h5vlen',
                            sources=['src/h5vlen' + SUFFIX],
-                           libraries=['hdf5'],
+                           # libraries=['hdf5'],
                            **compiler_settings)],
     cmdclass={'build_ext': build_ext},
     entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
