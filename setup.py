@@ -26,7 +26,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.2.2'
+VERSION = '2.2.3'
 
 cls_txt = """
 Development Status :: 5 - Production/Stable
@@ -50,8 +50,9 @@ entry, which is a set of data channels that all start at the same time.
 
 """
 
+import pkgconfig
 compiler_settings = {
-    'include_dirs': [numpy.get_include()],
+    'include_dirs': [pkgconfig.cflags("hdf5"), numpy.get_include()],
 }
 if sys.platform == 'darwin':
     compiler_settings['include_dirs'] += ['/opt/local/include']
