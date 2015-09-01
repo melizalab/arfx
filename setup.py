@@ -55,7 +55,7 @@ compiler_settings = pkgconfig.parse("hdf5")
 compiler_settings['include_dirs'].add(numpy.get_include())
 if sys.platform == 'darwin':
     compiler_settings['include_dirs'].add('/opt/local/include')
-compiler_settings = {k:list(v) for k,v in compiler_settings.items()}
+compiler_settings = dict((k,list(v)) for k,v in compiler_settings.items())
 
 
 requirements = ["arf>=2.2", "ewave>=1.0.4"]
