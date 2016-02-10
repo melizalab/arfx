@@ -18,7 +18,11 @@
 
 #if PY_MAJOR_VERSION < 3
     #define PyInt_AsLong PyLong_AsLong
+    #define PCMSEQIO_IMPORT_ERROR
+#else
+    #define PCMSEQIO_IMPORT_ERROR NULL
 #endif
+
 
 typedef struct {
         PyObject_HEAD
@@ -44,7 +48,7 @@ pcmfile_init(PcmfileObject* self, PyObject* args, PyObject *kwds)
         // there's got to be a better way to ignore extra arguments. mode will
         // not get set properly if set as a keyword arg, but we don't support
         // writing here anyway
-	if (!PyArg_ParseTuple(args, "s|s", &filename, &mode))
+        if (!PyArg_ParseTuple(args, "s|s", &filename, &mode))
                 return -1;
 
         // write mode is disabled for arfx
@@ -69,8 +73,8 @@ pcmfile_init(PcmfileObject* self, PyObject* args, PyObject *kwds)
 /* static PyObject* */
 /* pcmfile_iter(PcmfileObject* self) */
 /* { */
-/* 	return PySeqIter_New(PyObject_CallFunction((PyObject*) &PyRange_Type, */
-/* 						   "lll", 1, self->pfp->nentries+1, 1)); */
+/*      return PySeqIter_New(PyObject_CallFunction((PyObject*) &PyRange_Type, */
+/*                                                 "lll", 1, self->pfp->nentries+1, 1)); */
 /* } */
 
 static PyObject*
@@ -88,10 +92,10 @@ pcmfile_filename(PcmfileObject* self, void *closure)
 static PyObject*
 pcmfile_timestamp(PcmfileObject* self, void *closure)
 {
-	double tstamp;
+        double tstamp;
         struct pcmstat s;
         pcm_stat(self->pfp, &s);
-	tstamp = (double)s.timestamp + (double)s.microtimestamp / 1e6;
+        tstamp = (double)s.timestamp + (double)s.microtimestamp / 1e6;
         return Py_BuildValue("f", tstamp);
 }
 
@@ -99,8 +103,8 @@ static int
 pcmfile_settimestamp(PcmfileObject* self, PyObject *value, void *closure)
 {
         double timestamp, integ;
-	int sec, rv;
-	long microsec;
+        int sec, rv;
+        long microsec;
         if (value == NULL) {
                 PyErr_SetString(PyExc_TypeError, "Cannot delete the timestamp attribute");
                 return -1;
@@ -111,16 +115,16 @@ pcmfile_settimestamp(PcmfileObject* self, PyObject *value, void *closure)
                 PyErr_SetString(PyExc_TypeError, "Timestamp must be a positive float");
                 return -1;
         }
-	timestamp = modf(timestamp, &integ);
-	sec = (int)integ;
-	microsec = (long)(timestamp * 1e6);
+        timestamp = modf(timestamp, &integ);
+        sec = (int)integ;
+        microsec = (long)(timestamp * 1e6);
         rv = pcm_ctl(self->pfp, PCMIOSETTIME, (int*)&sec);
-	rv += pcm_ctl(self->pfp, PCMIOSETTIMEFRACTION, (long*)&microsec);
-	if (rv < 0) {
-		PyErr_SetString(PyExc_IOError, "Error setting timestamp");
-		return -1;
-	}
-	return 0;
+        rv += pcm_ctl(self->pfp, PCMIOSETTIMEFRACTION, (long*)&microsec);
+        if (rv < 0) {
+                PyErr_SetString(PyExc_IOError, "Error setting timestamp");
+                return -1;
+        }
+        return 0;
 }
 
 static PyObject*
@@ -208,7 +212,7 @@ pcmfile_write(PcmfileObject* self, PyObject* args)
 {
         PyObject* o;
         PyArrayObject* data;
-	int rv;
+        int rv;
         if (!PyArg_ParseTuple(args, "O", &o))
                 return NULL;
 
@@ -219,10 +223,10 @@ pcmfile_write(PcmfileObject* self, PyObject* args)
 
         rv = pcm_write(self->pfp, (short *)PyArray_DATA(data), PyArray_DIM(data, 0));
         Py_XDECREF(data);
-	if (rv != 0) {
-		PyErr_SetString(PyExc_IOError, "Unable to write to file.");
-		return NULL;
-	}
+        if (rv != 0) {
+                PyErr_SetString(PyExc_IOError, "Unable to write to file.");
+                return NULL;
+        }
         return Py_BuildValue("");
 }
 
@@ -270,15 +274,15 @@ static PyTypeObject PcmfileType = {
         0,                         /*tp_as_buffer*/
         Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,        /*tp_flags*/
         "Reads or writes pcm_seq2 files.\n\n"
-	"pcm_seq2 files can contain multiple entries; each entry has\n"
-	"a timestamp and sampling rate associated with it.\n"
-	"Only one bit depth is supported, 16-bit little-endian integers.\n\n"
-	"pseqfile(filename,mode='r')\n\n"
-	"mode can be 'r' or 'w'. Combined modes are not supported;\n"
-	"many of the functions and properties raise errors or return\n"
-	"meaningless results when accessed in write-only mode (indicated by\n"
-	"'rw' below). Also, sampling rate and timestamp of new entries should be\n"
-	"set before writing data to entries.", /* tp_doc*/
+        "pcm_seq2 files can contain multiple entries; each entry has\n"
+        "a timestamp and sampling rate associated with it.\n"
+        "Only one bit depth is supported, 16-bit little-endian integers.\n\n"
+        "pseqfile(filename,mode='r')\n\n"
+        "mode can be 'r' or 'w'. Combined modes are not supported;\n"
+        "many of the functions and properties raise errors or return\n"
+        "meaningless results when accessed in write-only mode (indicated by\n"
+        "'rw' below). Also, sampling rate and timestamp of new entries should be\n"
+        "set before writing data to entries.", /* tp_doc*/
         0,                             /* tp_traverse */
         0,                             /* tp_clear */
         0,                             /* tp_richcompare */
@@ -316,45 +320,37 @@ static struct PyModuleDef moduledef = {
     };
 #endif
 
-static PyObject *
-moduleinit(void)
+#if PY_MAJOR_VERSION < 3
+PyMODINIT_FUNC
+initpcmseqio(void)
+#else
+PyMODINIT_FUNC
+PyInit_pcmseqio(void)
+#endif
 {
         import_array();
         PyObject* m;
 
         PcmfileType.tp_dict = Py_BuildValue("{s:O,s:i,s:(s)}",
-					    "dtype",(PyObject *)PyArray_DescrFromType(NPY_SHORT),
-					    "nchannels", 1,
-					    "channels", "pcm");
+                                            "dtype",(PyObject *)PyArray_DescrFromType(NPY_SHORT),
+                                            "nchannels", 1,
+                                            "channels", "pcm");
 
         PcmfileType.tp_new = PyType_GenericNew;
         if (PyType_Ready(&PcmfileType) < 0)
-                return NULL;
+                return PCMSEQIO_IMPORT_ERROR;
 
 #if PY_MAJOR_VERSION >=3
         m = PyModule_Create(&moduledef);
 #else
         m = Py_InitModule3("pcmseqio", _pcmseqio_methods,
-			   "Read and write pcmseq2 files");
+                           "Read and write pcmseq2 files");
 #endif
 
         Py_INCREF(&PcmfileType);
         PyModule_AddObject(m, "pseqfile", (PyObject *)&PcmfileType);
 
+#if PY_MAJOR_VERSION >=3
         return m;
-}
-
-
-#if PY_MAJOR_VERSION < 3
-PyMODINIT_FUNC
-initpcmseqio(void)
-{
-        moduleinit();
-}
-#else
-PyMODINIT_FUNC
-PyInit_pcmseqio(void)
-{
-        return moduleinit();
-}
 #endif
+}
