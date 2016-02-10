@@ -10,6 +10,7 @@ on [HDF5](http://www.hdfgroup.org/HDF5).
 -   Python 2.6+ or 3.2+
 -   arf 2.2+ (<https://github.com/dmeliza/arf>)
 -   ewave 1.0.4+ (<https://github.com/dmeliza/py-ewave>)
+-   pkgconfig 1.1+
 
 ### installation
 
