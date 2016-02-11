@@ -5,13 +5,14 @@ python:
   - "2.7"
   - "3.2"
   - "3.3"
+  - "3.4"
 # command to install dependencies
 addons:
   apt:
     packages:
       libhdf5-serial-dev
 install:
-  - pip install numpy==1.8.0 --use-mirrors
+  - pip install numpy==1.10.4 --use-mirrors
   - pip install -r requirements.txt --use-mirrors
 # command to run tests
 script:
