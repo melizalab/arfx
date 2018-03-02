@@ -2,17 +2,10 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
 import sys
-if sys.hexversion < 0x02060000:
-    raise RuntimeError("Python 2.6 or higher required")
+from setuptools import setup, find_packages, Extension
 
-# setuptools 0.7+ doesn't play nice with distribute, so try to use existing
-# package if possible
-try:
-    from setuptools import setup, find_packages, Extension
-except ImportError:
-    from ez_setup import use_setuptools
-    use_setuptools()
-    from setuptools import setup, find_packages, Extension
+if sys.version_info[:2] < (2, 7) or (3, 0) <= sys.version_info[:2] < (3, 2):
+    raise RuntimeError("Python version 2.7 or >= 3.2 required.")
 
 try:
     from Cython.Distutils import build_ext
@@ -26,7 +19,7 @@ import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
-VERSION = '2.2.5'
+from arfx import __version__
 
 cls_txt = """
 Development Status :: 5 - Production/Stable
@@ -50,21 +43,26 @@ entry, which is a set of data channels that all start at the same time.
 
 """
 
-import pkgconfig
-compiler_settings = pkgconfig.parse("hdf5")
-compiler_settings['include_dirs'].add(numpy.get_include())
-if sys.platform == 'darwin':
-    compiler_settings['include_dirs'].add('/opt/local/include')
-compiler_settings = dict((k,list(v)) for k,v in compiler_settings.items())
+class BuildExt(build_ext):
+    def build_extensions(self):
+        import numpy
+        import pkgconfig
+        compiler_settings = pkgconfig.parse("hdf5")
+        compiler_settings['include_dirs'].insert(0, "include")
+        compiler_settings['include_dirs'].append(numpy.get_include())
+        c_opts = []
+        for ext in self.extensions:
+            for k, v in compiler_settings.items():
+                setattr(ext, k, v)
+            ext.extra_compile_args.extend(c_opts)
+        build_ext.build_extensions(self)
 
 
-requirements = ["arf>=2.2", "ewave>=1.0.4"]
-if sys.hexversion < 0x02070000:
-    requirements.append("argparse")
+requirements = ["pkgconfig>=1.2", "arf>=2.2", "ewave>=1.0.4", "numpy>=1.10"]
 
 setup(
     name='arfx',
-    version=VERSION,
+    version=__version__,
     description=short_desc,
     long_description=long_desc,
     classifiers=[x for x in cls_txt.split("\n") if x],
@@ -76,13 +74,11 @@ setup(
 
     packages=find_packages(exclude=["*test*"]),
     ext_modules=[Extension('arfx.pcmseqio',
-                           sources=['src/pcmseqio.c', 'src/pcmseq.c'],
-                           **compiler_settings),
+                           sources=['src/pcmseqio.c', 'src/pcmseq.c']),
                  Extension('arfx.h5vlen',
-                           sources=['src/h5vlen' + SUFFIX],
-                           # libraries=['hdf5'],
-                           **compiler_settings)],
-    cmdclass={'build_ext': build_ext},
+                           sources=['src/h5vlen' + SUFFIX])],
+    cmdclass={'build_ext': BuildExt},
+
     entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
                               '.wav = ewave:wavfile',
                               '.pcm_seq2 = arfx.pcmseqio:pseqfile',
