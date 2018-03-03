@@ -15,7 +15,7 @@ import numpy as nx
 import logging
 
 import arf
-from . import arfx
+from . import core
 from . import io
 from .tools import memoized
 
@@ -53,7 +53,7 @@ def get_dest_arf(filename, dry_run):
     else:
         fp = arf.open_file(filename + ".arf", mode="w-")
         arf.set_attributes(
-            fp, file_creator='org.meliza.arfx/arfxplog ' + arfx.__version__)
+            fp, file_creator='org.meliza.arfx/arfxplog ' + core.__version__)
         log.info("opened '%s.arf' for writing", filename)
     return fp
 
@@ -193,7 +193,7 @@ def parse_explog(explog, entry_attrs, datatype, split_sites=False,
                     sample_count=lastonset,
                     sampling_rate=sampling_rate,
                     entry_creator='org.meliza.arfx/arfxplog ' +
-                    arfx.__version__,
+                    core.__version__,
                     pen=pen, site=site, **entry_attrs)
                 entries[lastonset] = entry
 
@@ -289,7 +289,7 @@ def arfxplog():
     p = argparse.ArgumentParser(
         description="Move data from a saber experiment into ARF format",)
     p.add_argument('--version', action='version',
-                   version='%(prog)s ' + arfx.__version__)
+                   version='%(prog)s ' + core.__version__)
     p.add_argument(
         '--dry-run', help="parse the explog but don't save the data to disk",
         action="store_true")
@@ -300,9 +300,9 @@ def arfxplog():
                    action="store_true")
     p.add_argument('-T', help='specify data type (see --help-datatypes)',
                    default=arf.DataTypes.UNDEFINED, metavar='DATATYPE',
-                   dest='datatype', action=arfx.ParseDataType)
+                   dest='datatype', action=core.ParseDataType)
     p.add_argument(
-        '-k', help='specify attributes of entries', action=arfx.ParseKeyVal,
+        '-k', help='specify attributes of entries', action=core.ParseKeyVal,
         metavar="KEY=VALUE", dest='attrs', default={})
     p.add_argument('-s', help="generate arf file for each pen/site",
                    action="store_true", dest='split')
@@ -329,7 +329,7 @@ def arfxplog():
     ch.setLevel(loglevel)  # change
     ch.setFormatter(formatter)
     log.addHandler(ch)
-    log.info("version: %s", arfx.__version__)
+    log.info("version: %s", core.__version__)
     log.info("run time: %s", datetime.datetime.now())
 
     if opts.split:

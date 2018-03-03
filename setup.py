@@ -69,10 +69,10 @@ setup(
     long_description=long_desc,
     classifiers=[x for x in cls_txt.split("\n") if x],
     author='Dan Meliza',
-    author_email='"dan" at the domain "meliza.org"',
+    author_email="dan@meliza.org",
     maintainer='Dan Meliza',
-    maintainer_email='"dan" at the domain "meliza.org"',
-    url="https://github.com/dmeliza/arfx",
+    maintainer_email="dan@meliza.org",
+    url="https://github.com/melizalab/arfx",
 
     packages=find_packages(exclude=["*test*"]),
     ext_modules=[Extension('arfx.pcmseqio',
@@ -87,7 +87,7 @@ setup(
                               '.pcm_seq = arfx.pcmseqio:pseqfile',
                               '.pcmseq2 = arfx.pcmseqio:pseqfile',
                               ],
-                  'console_scripts': ['arfx = arfx.arfx:arfx',
+                  'console_scripts': ['arfx = arfx.core:arfx',
                                       'arfxplog = arfx.arfxplog:arfxplog'],
                   },
 

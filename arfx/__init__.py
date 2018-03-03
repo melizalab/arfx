@@ -6,5 +6,5 @@ operations involving single channel datasets, though it can also be used to copy
 entire entries between ARF files.
 """
 
-from arfx import __version__
+from .core import __version__
 __all__ = ['arfx']
