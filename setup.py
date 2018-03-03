@@ -15,7 +15,6 @@ except ImportError:
     SUFFIX = '.c'
 
 import sys
-import numpy
 
 # --- Distutils setup and metadata --------------------------------------------
 
@@ -48,6 +47,9 @@ class BuildExt(build_ext):
         import numpy
         import pkgconfig
         compiler_settings = pkgconfig.parse("hdf5")
+        # macports doesn't install the pkgconfig file for some reason
+        if sys.platform == 'darwin':
+            compiler_settings['include_dirs'].append('/opt/local/include')
         compiler_settings['include_dirs'].insert(0, "include")
         compiler_settings['include_dirs'].append(numpy.get_include())
         c_opts = []
