@@ -9,7 +9,7 @@ on [HDF5](http://www.hdfgroup.org/HDF5).
 
 ### requirements
 
--   Python 2.7 or >=3.3
+-   Python 2.7 or >=3.4
 -   numpy>=1.10
 -   arf>=2.2+ (<https://github.com/melizalab/arf>)
 -   ewave>=1.0.4+ (<https://github.com/melizalab/py-ewave>)
