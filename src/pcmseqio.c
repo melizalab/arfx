@@ -164,7 +164,7 @@ pcmfile_nsamples(PcmfileObject* self, void *closure)
 static PyObject*
 pcmfile_entry(PcmfileObject* self, void *closure)
 {
-        return Py_BuildValue("i", self->pfp->entry);
+        return Py_BuildValue("i", self->pfp->entry) - 1;
 }
 
 static int
@@ -176,7 +176,7 @@ pcmfile_seek(PcmfileObject* self, PyObject* value, void *closure)
                 return -1;
         }
 
-        entry = (int) PyLong_AsLong (value);
+        entry = (int) PyLong_AsLong (value) + 1;
         if (pcm_seek(self->pfp, entry) != 0) {
                 PyErr_SetString(PyExc_ValueError, "Invalid entry");
                 return -1;
