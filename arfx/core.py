@@ -499,10 +499,12 @@ class ParseDataType(argparse.Action):
 
     def __call__(self, parser, namespace, arg, option_string=None):
         if not arg.isdigit():
-            arg = arf.DataTypes._fromstring(arg)
-            if arg is None:
-                raise ValueError("%s is not a valid data type" % arg)
-        setattr(namespace, self.dest, int(arg))
+            argx = arf.DataTypes._fromstring(arg)
+            if argx is None:
+                raise ValueError("'%s' is not a valid data type" % arg)
+        else:
+            argx = arg
+        setattr(namespace, self.dest, int(argx))
 
 
 def arfx():
