@@ -156,10 +156,10 @@ is not defined, it is assumed to have the default value defined below.
 `nentries`: A readable property indicating the number of entries in the file. Default value
 is 1.
 
-`entry`: A readable and writable property corresponding to the currently active
-entry in the file. Active means that the `read()` and `write()` methods will
-affect only that entry. Default is 0, and **arfx** will not attempt to change
-the property if `nentries` is 1.
+`entry`: A readable and writable integer-valued property corresponding to the
+index of the currently active entry in the file. Active means that the `read()`
+and `write()` methods will affect only that entry. Default is 0, and **arfx**
+will not attempt to change the property if `nentries` is 1.
 
 ### version information
 
