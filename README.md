@@ -74,6 +74,7 @@ which can speed up I/O operations slightly.
 
 Currently only one sampled dataset per entry is supported. Clearly this does not
 encompass many use cases, but **arfx** is intended as a simple tool. More
+
 specialized import procedures can be easily written in Python using the `arf`
 API.
 
@@ -110,8 +111,10 @@ instead of extracting the entries, they are deleted. Because of limitations in
 the underlying HDF5 library, this does not free up the space, so the file is
 repacked unless the `-P` option is set.
 
-The `-u` (update) operation can be used to add or update attributes of entries,
+The `-U` (update) operation can be used to add or update attributes of entries,
 and to rename entries (if the `-n` flag is set).
+
+The `--write-attr` operation can be used to store the contents of text files in top-level attributes. The attributes have the name `user_<filename>`. The `--read-attr` operation can be used to read out those attributes. This is useful when data collection programs generate log or settings files that you want to store in the ARF file.
 
 ### extending arfx
 

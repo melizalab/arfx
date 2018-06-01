@@ -451,6 +451,40 @@ def update_entries(src, entries, **options):
                     print("^^^^^^^^^^")
 
 
+def write_toplevel_attribute(tgt, files, **options):
+    """Store contents of files as text in top-level attribute with basename of each file"""
+    with arf.open_file(tgt, 'a') as arfp:
+        try:
+            arf.check_file_version(arfp)
+        except Warning as e:
+            log.warn("warning: %s", e)
+        for fname in files:
+            attrname = "user_%s" % os.path.basename(fname)
+            print("%s -> %s/%s" % (fname, tgt, attrname))
+            textfp = open(fname, "rt")
+            data = textfp.read()
+            arfp.attrs[attrname] = data
+            textfp.close()
+
+
+def read_toplevel_attribute(src, attrnames, **options):
+    """Print text data stored in top-level attributes by write_toplevel_attribute()"""
+    if not os.path.exists(src):
+        raise IOError("the file %s does not exist" % src)
+    with arf.open_file(src, 'r') as arfp:
+        try:
+            arf.check_file_version(arfp)
+        except Warning as e:
+            log.warn("warning: %s", e)
+        for attrname in attrnames:
+            aname = "user_%s" % attrname
+            if aname in arfp.attrs:
+                data = arfp.attrs[aname]
+                print(data)
+            else:
+                print("no such attribute %s" % aname)
+
+
 def repack_file(path, **options):
     """ Call h5repack on a list of files to repack them """
     from shutil import rmtree, copy
@@ -537,6 +571,12 @@ def arfx():
     g.add_argument('-d', help='delete entries',
                    action='store_const', dest='op', const=delete_entries)
     g.add_argument(
+        '--write-attr', help='add text file(s) to top-level attribute(s)',
+        action='store_const', dest='op', const=write_toplevel_attribute)
+    g.add_argument(
+        '--read-attr', help='read top-level attribute(s)',
+        action='store_const', dest='op', const=read_toplevel_attribute)
+    g.add_argument(
         '--upgrade', help="migrate older ARF versions to %s" % __version__,
         action='store_const', dest='op', const=upgrade_file)
 
@@ -580,7 +620,7 @@ def arfx():
         args.op(args.arffile, entries, **opts)
     except Exception as e:
         raise
-        print("arfx: error: %s" % e)
+        print("[arfx] error: %s" % e)
         if isinstance(e, DeprecationWarning):
             print("      use arfx --upgrade to convert to version %s" %
                   arf.spec_version)
