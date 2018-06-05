@@ -4,7 +4,7 @@
 from __future__ import division
 from __future__ import unicode_literals
 
-from nose.tools import *
+from nose.tools import assert_equal, assert_true, raises
 
 import os
 import numpy as nx
@@ -25,7 +25,7 @@ def teardown():
     shutil.rmtree(temp_dir)
 
 
-def test_readwrite():
+def readwrite(dtype, nchannels):
 
     with pcmio.pcmfile(test_file, mode="w+", sampling_rate=20000, dtype='h', nchannels=1) as fp:
         assert_equal(fp.filename, test_file)
@@ -53,13 +53,14 @@ def test_readwrite():
         f("some garbage")
 
 
+def test_readwrite():
+    dtypes = ('b', 'h', 'i', 'l', 'f', 'd')
+    nchannels = (1, 2, 8)
+    for dtype in dtypes:
+        for nc in nchannels:
+            yield readwrite, dtype, nc
+
+
 @raises(ValueError)
 def test_badmode():
     pcmio.pcmfile(test_file, mode="z")
-
-
-@raises(ValueError)
-def test_badchans():
-    pcmio.pcmfile(test_file, mode="w", nchannels=2)
-
-

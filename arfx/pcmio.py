@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
-Read and write PCM format files.
+Read and write raw binary format files
 
 Copyright (C) 2012 Dan Meliza <dan // AT // meliza.org>
 Created 2012-03-29
@@ -13,21 +13,28 @@ from ewave import rescale
 
 
 class pcmfile(object):
+    """Provides access to sampled data in raw binary format
+
+    Raw binary files store sampled data as a continuous array. The data type and
+    channel layout must be known in order to correctly map the contents in and
+    out of memory.
+
+    If the file contains more than one channel, the layout must be T x N, where
+    N is the number of channels and T is the number of samples.
+
+    file:          the path of the file to open, or an open file-like (binary-mode) object
+    mode:          the mode to open the file. if already open, uses the file's handle
+    sampling_rate: specify the sampling rate of the data. this has no effect on the file.
+    dtype:         specify the data type using numpy character codes.
+                   'b','h','i','l':  8,16,32,64-bit PCM
+                   'f','d':  32,64-bit IEEE float
+    nchannels:     specify the number of channels
+
+    additional keyword arguments are ignored
+
+    """
 
     def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
-        """Opens file for reading and/or writing. Any of the standard modes
-        supported by file can be used.
-
-        file:          the path of the file to open, or an open file-like object
-        mode:          the mode to open the file. if already open, uses the file's handle
-        sampling_rate: set the sampling rate of the data. this has no effect on the file.
-        dtype:         set the storage format (i.e. how the data will be read)
-                       'b','h','i','l':  8,16,32,64-bit PCM
-                       'f','d':  32,64-bit IEEE float
-        nchannels:     must be 1
-
-        additional keyword arguments are ignored
-        """
         import sys
         if sys.version > '3':
             from builtins import open
@@ -38,9 +45,6 @@ class pcmfile(object):
         self._dtype = ndtype(dtype)
         self._nchannels = int(nchannels)
         self._framerate = int(sampling_rate)
-        if not nchannels == 1:
-            raise ValueError(
-                "More than one channel not supported by this format")
 
         if hasattr(file, 'read'):
             self.fp = file
@@ -93,12 +97,13 @@ class pcmfile(object):
         return self._dtype
 
     def __repr__(self):
-        return "<open %s.%s '%s', mode '%s', dtype '%s', sampling rate %d at %s>" % \
+        return "<open %s.%s '%s', mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>" % \
             (self.__class__.__module__,
              self.__class__.__name__,
              self.filename,
              self.mode,
              self.dtype,
+             self.nchannels,
              self.sampling_rate,
              hex(id(self)))
 
@@ -132,7 +137,7 @@ class pcmfile(object):
             frames = self.nframes - offset
         if memmap:
             A = mmap(self.fp, offset=offset, dtype=self._dtype, mode=memmap,
-                     shape=frames * self.nchannels)
+                     shape=(frames, self.nchannels))
         else:
             pos = self.fp.tell()
             self.fp.seek(offset)
@@ -144,18 +149,24 @@ class pcmfile(object):
             nsamples = (A.size // self.nchannels) * self.nchannels
             A = A[:nsamples]
             A.shape = (nsamples // self.nchannels, self.nchannels)
-        return A
+        return A.squeeze()
 
     def write(self, data, scale=True):
-        """ Write data to the file
+        """Write data to the end of the file
+
+        This function can be called serially to store data in chunks. Each chunk
+        is appended at the end of the file.
 
         - data : input data, in any form that can be converted to an array with
                  the file's dtype. Data are silently coerced into an array whose
-                 shape matches the number of channels in the file.
+                 shape matches the number of channels in the file. This means
+                 the caller is responsible for checking dimensions in
+                 multichannel files.
 
         - scale : if True, data are rescaled so that their maximum range matches
                     that of the file's encoding. If not, the raw values are
                     used, which can result in clipping.
+
         """
         from numpy import asarray
         if self.mode == 'r':
@@ -165,7 +176,7 @@ class pcmfile(object):
             data = asarray(data, self._dtype)
         data = rescale(data, self._dtype).tostring()
 
-        self.fp.write(data)
+        self.fp.write(data.flatten())
         return self
 
 
