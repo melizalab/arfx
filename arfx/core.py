@@ -22,14 +22,13 @@ from __future__ import division
 from __future__ import unicode_literals
 import os
 import sys
-import posixpath
 import argparse
 import logging
 
 import arf
 from . import io
 
-__version__ = "2.2.8"
+__version__ = "2.3.0"
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
@@ -343,6 +342,7 @@ def copy_entries(tgt, files, **options):
     entry_base: if specified, rename entries sequentially in target file
     """
     from .tools import memoized
+    import posixpath as pp
     from h5py import Group
     ebase = options.get('template', None)
     acache = memoized(arf.open_file)
@@ -354,7 +354,7 @@ def copy_entries(tgt, files, **options):
             # file.arf is a file; file.arf/entry is entry
             # dir/file.arf is a file; dir/file.arf/entry is entry
             # on windows, dir\file.arf/entry is an entry
-            pn, fn = posixpath.split(f)
+            pn, fn = pp.split(f)
             if os.path.isfile(f):
                 it = ((f, entry) for ename, entry in acache(f).items())
             elif os.path.isfile(pn):
@@ -373,7 +373,7 @@ def copy_entries(tgt, files, **options):
                     entry_name = default_entry_template.format(
                         base=ebase, index=arf.count_children(arfp, Group))
                 else:
-                    entry_name = posixpath.basename(entry.name)
+                    entry_name = pp.basename(entry.name)
                 arfp.copy(entry, arfp, name=entry_name)
                 log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
@@ -418,6 +418,7 @@ def update_entries(src, entries, **options):
     entries: if None or empty, updates all entries. In this case, if the
              name parameter is set, the entries are renamed sequentially
     """
+    import posixpath as pp
     if not os.path.exists(src):
         raise IOError("the file %s does not exist" % src)
     ebase = options.get('template', None)
@@ -435,7 +436,7 @@ def update_entries(src, entries, **options):
         except Warning as e:
             log.warn("warning: %s", e)
         for i, entry in enumerate(arfp):
-            if entries is None or len(entries) == 0 or posixpath.relpath(entry) in entries:
+            if entries is None or len(entries) == 0 or pp.relpath(entry) in entries:
                 enode = arfp[entry]
                 if options.get('verbose', False):
                     print("vvvvvvvvvv")
@@ -508,12 +509,6 @@ def repack_file(path, **options):
         rmtree(tdir)
 
 
-def upgrade_file(path, *args, **options):
-    from . import migrate
-    migrate.migrate_file(path)
-    repack_file(path, **options)
-
-
 class ParseKeyVal(argparse.Action):
 
     def __call__(self, parser, namespace, arg, option_string=None):
@@ -542,8 +537,6 @@ class ParseDataType(argparse.Action):
 
 
 def arfx():
-    import datetime
-
     p = argparse.ArgumentParser(
         description='copy data in and out of ARF files')
     p.add_argument('entries', nargs='*')
@@ -562,7 +555,7 @@ def arfx():
                    action='store_const', dest='op', const=create_and_add_entries)
     g.add_argument('-r', help='add data to an existing file',
                    action='store_const', dest='op', const=add_entries)
-    g.add_argument('-x', help='extract entries from a file',
+    g.add_argument('-x', help='extract one or more entries from the ARF file',
                    action='store_const', dest='op', const=extract_entries)
     g.add_argument('-t', help='list contents of the file',
                    action='store_const', dest='op', const=list_entries)
@@ -576,9 +569,6 @@ def arfx():
     g.add_argument(
         '--read-attr', help='read top-level attribute(s)',
         action='store_const', dest='op', const=read_toplevel_attribute)
-    g.add_argument(
-        '--upgrade', help="migrate older ARF versions to %s" % __version__,
-        action='store_const', dest='op', const=upgrade_file)
 
     g = p.add_argument_group('Options')
     g.add_argument('-f', help='the ARF file to operate on', required=True,
@@ -611,18 +601,15 @@ def arfx():
     ch.setLevel(loglevel)  # change
     ch.setFormatter(formatter)
     log.addHandler(ch)
-    log.info("version: %s", __version__)
-    log.info("run time: %s", datetime.datetime.now())
 
     try:
         opts = args.__dict__.copy()
         entries = opts.pop('entries')
         args.op(args.arffile, entries, **opts)
     except Exception as e:
-        raise
         print("[arfx] error: %s" % e)
         if isinstance(e, DeprecationWarning):
-            print("      use arfx --upgrade to convert to version %s" %
+            print("      use arfx-migrate to convert to version %s" %
                   arf.spec_version)
         sys.exit(-1)
     return 0

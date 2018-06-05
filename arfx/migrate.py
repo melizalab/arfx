@@ -17,8 +17,7 @@ from distutils.version import StrictVersion
 
 from . import h5vlen
 
-log = logging.getLogger('arfx.migrate')   # root logger
-
+log = logging.getLogger('arfx-migrate')   # root logger
 
 def unpickle_attrs(attrs, old_attrs=None):
     """
@@ -186,7 +185,7 @@ def cvt_11_20(afp, **kwargs):
             if "units" in dset.attrs and dset.attrs["units"] == "samples" \
                and "sampling_rate" not in dset.attrs:
                 if sampling_rate is None:
-                    raise ValueError("need sampling rate for %s; supply as metadata" % dset.name)
+                    raise ValueError("need sampling rate for %s" % dset.name)
                 log.info("Adding sampling rate to %s", dname)
                 dset.attrs['sampling_rate'] = float(sampling_rate)
 
@@ -227,6 +226,38 @@ def migrate_file(path, newname=None, **kwargs):
     file_version = arf.check_file_version(fp)
     log.info("%s is up to date (%s)", path, file_version)
     fp.close()
+
+
+def migrate_script(argv=None):
+    import argparse
+    from .core import __version__, repack_file
+
+    p = argparse.ArgumentParser(prog="arfx-migrate",
+                                description="migrate older ARF files to %s spec" % arf.spec_version,)
+    p.add_argument('--version', action='version',
+                   version='%(prog)s ' + __version__)
+    p.add_argument('-v', help='verbose output', action='store_true', dest='verbose')
+    p.add_argument('--sampling-rate', help="specify sampling rate if missing", type=float)
+    p.add_argument('-z', help="set compression level in migrated file (default: %(default)s)",
+                   type=int, default=1, dest='compress')
+    p.add_argument("file", help="the file to migrate")
+
+    args = p.parse_args(argv)
+
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter("[%(name)s] %(message)s")
+    if args.verbose:
+        loglevel = logging.DEBUG
+    else:
+        loglevel = logging.INFO
+    log.setLevel(loglevel)
+    ch.setLevel(loglevel)  # change
+    ch.setFormatter(formatter)
+    log.addHandler(ch)
+
+    migrate_file(args.file, sampling_rate=args.sampling_rate)
+    repack_file(args.file, compress=args.compress)
+
 
 # Variables:
 # End:
