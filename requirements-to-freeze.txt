@@ -1,7 +1,4 @@
 arf
 ewave
-h5py
 nose
-numpy
-pkgconfig
 six
