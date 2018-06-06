@@ -60,7 +60,7 @@ class BuildExt(build_ext):
         build_ext.build_extensions(self)
 
 
-requirements = ["pkgconfig>=1.2", "arf>=2.2", "ewave>=1.0.4", "numpy>=1.10"]
+requirements = ["pkgconfig>=1.2", "arf>=2.3", "ewave>=1.0.4", "numpy>=1.10"]
 
 setup(
     name='arfx',
@@ -91,6 +91,7 @@ setup(
                   'console_scripts': ['arfx = arfx.core:arfx',
                                       'arfxplog = arfx.arfxplog:arfxplog',
                                       'arfx-migrate = arfx.migrate:migrate_script',
+                                      'arfx-collect-sampled = arfx.collect:collect_sampled_script',
                   ],
                   },
 
