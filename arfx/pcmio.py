@@ -15,9 +15,9 @@ from ewave import rescale
 class pcmfile(object):
     """Provides access to sampled data in raw binary format
 
-    Raw binary files store sampled data as a continuous array. The data type and
-    channel layout must be known in order to correctly map the contents in and
-    out of memory.
+    Raw binary files store sampled data as a continuous little-endian array. The
+    data type and channel layout must be known in order to correctly map the
+    contents in and out of memory.
 
     If the file contains more than one channel, the layout must be T x N, where
     N is the number of channels and T is the number of samples.
@@ -28,13 +28,15 @@ class pcmfile(object):
     dtype:         specify the data type using numpy character codes.
                    'b','h','i','l':  8,16,32,64-bit PCM
                    'f','d':  32,64-bit IEEE float
+    byteorder:     specify byte order ('<' corresponds to little-endian, the default)
     nchannels:     specify the number of channels
 
     additional keyword arguments are ignored
 
     """
 
-    def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, **kwargs):
+    def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, byteorder='<',
+                 **kwargs):
         import sys
         if sys.version > '3':
             from builtins import open
@@ -42,7 +44,7 @@ class pcmfile(object):
             from __builtin__ import open
         from numpy import dtype as ndtype
         # validate arguments
-        self._dtype = ndtype(dtype)
+        self._dtype = ndtype(dtype).newbyteorder(byteorder)
         self._nchannels = int(nchannels)
         self._framerate = int(sampling_rate)
 
@@ -97,7 +99,7 @@ class pcmfile(object):
         return self._dtype
 
     def __repr__(self):
-        return "<open %s.%s '%s', mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>" % \
+        return "<open %s.%s %s, mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>" % \
             (self.__class__.__module__,
              self.__class__.__name__,
              self.filename,
@@ -172,11 +174,13 @@ class pcmfile(object):
         if self.mode == 'r':
             raise IOError('file is read-only')
 
-        if not scale:
+        if scale:
+            data = rescale(data, self._dtype)
+        else:
             data = asarray(data, self._dtype)
-        data = rescale(data, self._dtype).tostring()
 
-        self.fp.write(data.flatten())
+        self.fp.seek(0, 2)
+        self.fp.write(data.flatten().tostring())
         return self
 
 
