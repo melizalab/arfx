@@ -542,6 +542,8 @@ def arfx():
     p.add_argument('entries', nargs='*')
     p.add_argument('--version', action='version',
                    version='%(prog)s ' + __version__)
+    p.add_argument('--arf-version', action='version',
+                   version=arf.version_info())
     p.add_argument('--help-datatypes',
                    help='print available datatypes and exit',
                    action='version', version=arf.DataTypes._doc())

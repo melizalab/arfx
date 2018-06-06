@@ -1,17 +1,17 @@
 sudo: false
 language: python
 python:
-  - "2.7"
-  - "3.4"
-  - "3.5"
-  - "3.6"
-# command to install dependencies
+- '2.7'
+- '3.4'
+- '3.5'
+- '3.6'
 addons:
   apt:
-    packages:
-      libhdf5-serial-dev
+    packages: libhdf5-serial-dev
 install:
-  - pip install -r requirements.txt
-# command to run tests
+- pip install -r requirements.txt
 script:
-  - python setup.py test
+- python setup.py test
+notifications:
+  slack:
+    secure: hBQQXHcN9bGng5GMTwTLA3SYf5yFj4uDP3utnpFcULuCYdKMwxMVIyjUcfkd1bojS9vt2MA8bcWC0vZ9v6EChCGvlGwfSMskOMTv++Gbou4xPrHwbHPDBA9lbnJ5VMN4zazTS4zg6tHIpez1se9YYjo/LwSp6KwV6E5ybeZBkJM=
