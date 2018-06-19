@@ -90,6 +90,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 
 
 def collect_sampled_script(argv=None):
+    from natsort import natsorted
     import argparse
     p = argparse.ArgumentParser(prog="arfx-collect-sampled",
                                 description="collect sampled data from arf files across channels and entries")
@@ -138,16 +139,19 @@ def collect_sampled_script(argv=None):
             dtype = first(channel_props, operator.itemgetter("dtype"))
         else:
             dtype = args.dtype
-        log.info(" - entries: %s; channels: %s", nentries, nchannels)
+        log.info(" - channels (%d):", nchannels)
+        for cname in natsorted(channel_props):
+            log.info("    - %s", cname)
         log.info("opening '%s' for output", args.outfile)
         log.info(" - sampling rate = %f", sampling_rate)
         log.info(" - dtype = '%s'", dtype)
+        log.info(" - entries (%d):", nentries)
         with io.open(args.outfile, mode="w",
                      sampling_rate=sampling_rate, dtype=dtype, nchannels=nchannels) as ofp:
-            for entry_name in entry_names:
+            for entry_name in natsorted(entry_names):
                 entry = arfp[entry_name]
                 # nsamples = first(entry, operator.attrgetter("shape"))[0]
                 # would be more efficient to preallocate but this is easy
-                data = np.column_stack(entry[cname][:] for cname in channel_props)
+                data = np.column_stack(entry[cname][:] for cname in natsorted(channel_props))
                 ofp.write(data)
-                log.info("'%s' -> %d samples", entry_name, data.shape[0])
+                log.info("    - '%s' -> %d samples", entry_name, data.shape[0])
