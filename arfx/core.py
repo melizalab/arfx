@@ -25,6 +25,7 @@ import sys
 import argparse
 import logging
 
+import h5py as h5
 import arf
 from . import io
 
@@ -64,7 +65,12 @@ def entry_repr(entry):
             if dset.dtype.names is not None:
                 out += " (compound type)"
 
-        out += ", units '%s'" % dset.attrs.get('units', '')
+        units = dset.attrs.get('units', '')
+        try:
+            units = units.decode("ascii")
+        except AttributeError:
+            pass
+        out += ", units '%s'" % units
         out += ", type %s" % datatypes[dset.attrs.get('datatype',
                                                       arf.DataTypes.UNDEFINED)]
         if dset.compression:
@@ -400,7 +406,9 @@ def list_entries(src, entries, **options):
                 it = iter(arfp)
             for name in it:
                 entry = arfp[name]
-                if options.get('verbose', False):
+                if isinstance(entry, h5.Dataset):
+                    print("%s: top-level dataset" % entry.name)
+                elif options.get('verbose', False):
                     print(entry_repr(entry))
                 else:
                     print("%s: %d channel%s" %
