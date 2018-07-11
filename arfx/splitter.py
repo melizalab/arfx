@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-"""Reorganize a long recording into a single file
-
-This script collects data from a recording, possibly made over multiple ARF
+"""This script collects data from a recording, possibly made over multiple ARF
 files and splits it into chunks in a new file. Each new entry is
 given an updated timestamp and attributes from the source entries.
 
@@ -68,8 +66,6 @@ def main(argv=None):
 
     p.add_argument("--duration", "-T", help="the maximum duration of entries "
                    "(default: %(default).2f seconds)", type=float, default=600)
-    p.add_argument("--dset", "-d", help="the dataset name to analyze. default is to use the first "
-                   "dataset in the first entry")
     p.add_argument("--compress", "-z", help="set compression level in output file "
                    "(default: %(default)d)", type=int, default=1)
     p.add_argument("--dry-run", "-n", help="don't actually create the target file or copy data",
@@ -101,12 +97,11 @@ def main(argv=None):
     if not args.dry_run:
         tgt_file = arf.open_file(args.tgt, mode="w")
         log.info("created destination file: %s", tgt_file.filename)
-
-    # merge log entries
-    jilllog = merge_jill_logs(srcs)
-    if jilllog is not None:
-        tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
-        log.info("merged jill_log datasets")
+        # merge log entries
+        jilllog = merge_jill_logs(srcs)
+        if jilllog is not None:
+            tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
+            log.info("merged jill_log datasets")
 
     # iterate through source entries, then chunk up datasets
     for entry, timestamp in entries:
