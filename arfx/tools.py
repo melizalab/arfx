@@ -10,10 +10,9 @@ import functools
 
 
 class memoized(object):
-
-    """Decorator. Caches a function's return value each time it is called.
+    """Memoizing decorator. Caches a function's return value each time it is called.
     If called later with the same arguments, the cached value is returned
-    (not reevaluated).
+    instead of evaluating the function.
     """
 
     def __init__(self, func):

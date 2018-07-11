@@ -28,7 +28,7 @@ import logging
 import arf
 from . import io
 
-__version__ = "2.3.1"
+__version__ = "2.4.0"
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"

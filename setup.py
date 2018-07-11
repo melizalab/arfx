@@ -89,6 +89,7 @@ setup(
                   'console_scripts': ['arfx = arfx.core:arfx',
                                       'arfxplog = arfx.arfxplog:arfxplog',
                                       'arfx-migrate = arfx.migrate:migrate_script',
+                                      'arfx-split = arfx.splitter:main',
                                       'arfx-collect-sampled = arfx.collect:collect_sampled_script',
                   ],
                   },
