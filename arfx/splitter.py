@@ -91,6 +91,10 @@ def main(argv=None):
     srcs = [h5.File(fname, "r") for fname in args.src]
     entries = sorted(itertools.chain.from_iterable(entry_timestamps(fp) for fp in srcs),
                      key=operator.itemgetter(0))
+    if args.verbose:
+        log.debug("entry order:")
+        for entry, timestamp in entries:
+            log.debug("  %s%s (time=%s)", os.path.basename(entry.file.filename), entry.name, timestamp)
 
     # open output file
     tgt_entry_index = 0
