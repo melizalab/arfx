@@ -90,7 +90,7 @@ def main(argv=None):
     log.info("sorting source file entries by timestamp")
     srcs = [h5.File(fname, "r") for fname in args.src]
     entries = sorted(itertools.chain.from_iterable(entry_timestamps(fp) for fp in srcs),
-                     key=operator.itemgetter(0))
+                     key=operator.itemgetter(1))
     if args.verbose:
         log.debug("entry order:")
         for entry, timestamp in entries:
