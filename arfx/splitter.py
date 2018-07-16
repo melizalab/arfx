@@ -100,11 +100,12 @@ def main(argv=None):
             log.debug("  %s%s (time=%s)", os.path.basename(entry.file.filename), entry.name, timestamp)
 
     # open output file
-    tgt_entry_index = 0
     if not args.dry_run:
         if args.append:
             tgt_file = arf.open_file(args.tgt, mode="a")
             log.info("appending to destination file: %s", tgt_file.filename)
+            log.info("  counting entries...")
+            tgt_entry_index = arf.count_children(tgt_file, h5.Group)
         else:
             tgt_file = arf.open_file(args.tgt, mode="w")
             log.info("created destination file: %s", tgt_file.filename)
@@ -112,6 +113,7 @@ def main(argv=None):
             if jilllog is not None:
                 tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
                 log.info("merged jill_log datasets")
+            tgt_entry_index = 0
 
     # iterate through source entries, then chunk up datasets
     for entry, timestamp in entries:
@@ -120,8 +122,6 @@ def main(argv=None):
         n_chunks = int(max_duration // args.duration) + 1
         log.debug("  max duration: %3.2f s (chunks=%d)", max_duration, n_chunks)
         for i in range(n_chunks):
-            if not args.dry_run and args.append:
-                tgt_entry_index = arf.count_children(tgt_file, h5.Group)
             tgt_entry_name = "entry_%05d" % tgt_entry_index
             tgt_timestamp = timestamp + datetime.timedelta(seconds=args.duration) * i
             # create target entry
