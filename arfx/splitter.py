@@ -70,8 +70,11 @@ def main(argv=None):
                    "(default: %(default)d)", type=int, default=1)
     p.add_argument("--dry-run", "-n", help="don't actually create the target file or copy data",
                    action="store_true")
-    p.add_argument("src", help="the ARF files to analyze", nargs="+")
-    p.add_argument("tgt", help="the ARF file to create (will overwrite!)")
+    p.add_argument("--append", "-a", help="if true, will append data from src to tgt (default "
+                   "is to overwrite). Note that log files are NOT merged in this mode",
+                   action="store_true")
+    p.add_argument("src", help="the ARF files to chunk up", nargs="+")
+    p.add_argument("tgt", help="the destination ARF file")
 
     args = p.parse_args(argv)
 
@@ -99,13 +102,16 @@ def main(argv=None):
     # open output file
     tgt_entry_index = 0
     if not args.dry_run:
-        tgt_file = arf.open_file(args.tgt, mode="w")
-        log.info("created destination file: %s", tgt_file.filename)
-        # merge log entries
-        jilllog = merge_jill_logs(srcs)
-        if jilllog is not None:
-            tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
-            log.info("merged jill_log datasets")
+        if args.append:
+            tgt_file = arf.open_file(args.tgt, mode="a")
+            log.info("appending to destination file: %s", tgt_file.filename)
+        else:
+            tgt_file = arf.open_file(args.tgt, mode="w")
+            log.info("created destination file: %s", tgt_file.filename)
+            jilllog = merge_jill_logs(srcs)
+            if jilllog is not None:
+                tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
+                log.info("merged jill_log datasets")
 
     # iterate through source entries, then chunk up datasets
     for entry, timestamp in entries:
@@ -114,6 +120,8 @@ def main(argv=None):
         n_chunks = int(max_duration // args.duration) + 1
         log.debug("  max duration: %3.2f s (chunks=%d)", max_duration, n_chunks)
         for i in range(n_chunks):
+            if not args.dry_run and args.append:
+                tgt_entry_index = arf.count_children(tgt_file, h5.Group)
             tgt_entry_name = "entry_%05d" % tgt_entry_index
             tgt_timestamp = timestamp + datetime.timedelta(seconds=args.duration) * i
             # create target entry
