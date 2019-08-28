@@ -92,8 +92,12 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 def collect_sampled_script(argv=None):
     from natsort import natsorted
     import argparse
-    p = argparse.ArgumentParser(prog="arfx-collect-sampled",
-                                description="collect sampled data from arf files across channels and entries")
+    p = argparse.ArgumentParser(
+        prog="arfx-collect-sampled",
+        description="Collect sampled data from arf files across channels and entries"
+        "into a flat binary array. The output file can be any format that supports multiple channels; "
+        "for example, wav or dat (raw binary)"
+    )
     p.add_argument('--version', action="version",
                    version="%(prog)s " + __version__)
     p.add_argument('-v', '--verbose', help="show verbose log messages", action="store_true")

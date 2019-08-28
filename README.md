@@ -2,8 +2,8 @@
 
 [![Build Status](https://travis-ci.org/melizalab/arfx.png?branch=master)](https://travis-ci.org/melizalab/arfx)
 
-**arfx** is a commandline tool for copying sampled data in and out of ARF
-containers. The syntax is similar to `tar`. ARF (<https://github.com/melizalab/arf>)
+**arfx** is a family of commandline tools for copying sampled data in and out of ARF
+containers. ARF (<https://github.com/melizalab/arf>)
 is an open, portable file format for storing behavioral and neural data, based
 on [HDF5](http://www.hdfgroup.org/HDF5).
 
@@ -29,7 +29,7 @@ python setup.py install
 
 ### usage
 
-The general syntax is `arfx operation [options] files`. Operations are as
+The general syntax is `arfx operation [options] files`. The syntax is similar to `tar`. Operations are as
 follows:
 
 -   **-A:** copy data from one container to another
@@ -115,6 +115,19 @@ The `-U` (update) operation can be used to add or update attributes of entries,
 and to rename entries (if the `-n` flag is set).
 
 The `--write-attr` operation can be used to store the contents of text files in top-level attributes. The attributes have the name `user_<filename>`. The `--read-attr` operation can be used to read out those attributes. This is useful when data collection programs generate log or settings files that you want to store in the ARF file.
+
+### other utilities
+
+This package comes with a few scripts that do fairly specific operations.
+
+#### arfx-split
+
+This script is used to reorganize very large recordings, possibly contained in multiple files, into manageable chunks. Each new entry is given an updated timestamp and attributes from the source entries. Currently, no effort is made to splice data across entries or files. This may result in some short
+entries. Only sampled datasets are processed.
+
+#### arfx-collect-sampled
+
+This script is used to export data into a flat binary structure. It collects sampled data across channels and entries into a single 2-D array. The output can be stored in a multichannel wav file or in a raw binary `dat` format (N samples by M channels), which is used by a wide variety of spike-sorting tools.
 
 ### extending arfx
 
