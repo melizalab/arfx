@@ -67,6 +67,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
     sampling rate and units are not consistent within an entry, logs a warning.
 
     """
+    import h5py as h5
     log.info("checking entry consistency")
     # FIXME catch error when file does not track creation order
     entry_names = []
@@ -75,6 +76,8 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
         if entries is not None and entry_name in entries:
             continue
         entry = arfp[entry_name]
+        if not isinstance(entry, h5.Group):
+            continue
         props = channel_properties(entry, channels, predicate)
         sample_counts = set(v.pop("samples") for v in props.values())
         if len(sample_counts) > 1:
