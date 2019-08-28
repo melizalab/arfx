@@ -230,7 +230,7 @@ def migrate_file(path, newname=None, **kwargs):
 
 def migrate_script(argv=None):
     import argparse
-    from .core import __version__, repack_file
+    from .core import __version__, repack_file, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-migrate",
                                 description="migrate older ARF files to %s spec" % arf.spec_version,)
@@ -243,17 +243,7 @@ def migrate_script(argv=None):
     p.add_argument("file", help="the file to migrate")
 
     args = p.parse_args(argv)
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(message)s")
-    if args.verbose:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    log.setLevel(loglevel)
-    ch.setLevel(loglevel)  # change
-    ch.setFormatter(formatter)
-    log.addHandler(ch)
+    setup_log(log, args.verbose)
 
     migrate_file(args.file, sampling_rate=args.sampling_rate)
     repack_file(args.file, compress=args.compress)

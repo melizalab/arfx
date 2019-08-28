@@ -544,6 +544,16 @@ class ParseDataType(argparse.Action):
         setattr(namespace, self.dest, int(argx))
 
 
+def setup_log(log, debug=False):
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter("[%(name)s] %(message)s")
+    loglevel = logging.DEBUG if debug else logging.INFO
+    log.setLevel(loglevel)
+    ch.setLevel(loglevel)
+    ch.setFormatter(formatter)
+    log.addHandler(ch)
+
+
 def arfx():
     p = argparse.ArgumentParser(
         description='copy data in and out of ARF files')
@@ -601,16 +611,7 @@ def arfx():
 
     args = p.parse_args()
 
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(message)s")
-    if args.verbose:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    log.setLevel(loglevel)
-    ch.setLevel(loglevel)  # change
-    ch.setFormatter(formatter)
-    log.addHandler(ch)
+    setup_log(log, args.verbose)
 
     try:
         opts = args.__dict__.copy()

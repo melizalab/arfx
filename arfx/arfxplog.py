@@ -319,16 +319,7 @@ def arfxplog():
 
     opts = p.parse_args()
 
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(message)s")
-    if opts.verbose:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    log.setLevel(loglevel)
-    ch.setLevel(loglevel)  # change
-    ch.setFormatter(formatter)
-    log.addHandler(ch)
+    core.setup_log(log, opts.verbose)
     log.info("version: %s", core.__version__)
     log.info("run time: %s", datetime.datetime.now())
 

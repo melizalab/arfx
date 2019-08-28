@@ -57,7 +57,7 @@ def merge_jill_logs(files):
 
 def main(argv=None):
     import argparse
-    from .core import __version__
+    from .core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-split", description=__doc__)
     p.add_argument('--version', action='version',
@@ -77,17 +77,7 @@ def main(argv=None):
     p.add_argument("tgt", help="the destination ARF file")
 
     args = p.parse_args(argv)
-
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(message)s")
-    if args.verbose:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    log.setLevel(loglevel)
-    ch.setLevel(loglevel)  # change
-    ch.setFormatter(formatter)
-    log.addHandler(ch)
+    setup_log(log, args.verbose)
 
     # open all input files and sort entries by timestamp
     log.info("sorting source file entries by timestamp")

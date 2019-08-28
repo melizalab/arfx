@@ -14,7 +14,7 @@ import numpy as np
 import logging
 import arf
 
-from .core import __version__
+from .core import __version__, setup_log
 from . import io
 
 log = logging.getLogger("arfx-collect")
@@ -117,16 +117,7 @@ def collect_sampled_script(argv=None):
 
     args = p.parse_args(argv)
 
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter("[%(name)s] %(message)s")
-    if args.verbose:
-        loglevel = logging.DEBUG
-    else:
-        loglevel = logging.INFO
-    log.setLevel(loglevel)
-    ch.setLevel(loglevel)  # change
-    ch.setFormatter(formatter)
-    log.addHandler(ch)
+    setup_log(log, args.verbose)
 
     with arf.open_file(args.arffile, "r") as arfp:
         log.info("unpacking '%s'", args.arffile)
