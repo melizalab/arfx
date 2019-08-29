@@ -35,6 +35,7 @@ def main(argv=None):
                    metavar='CHANNEL', nargs="+")
     p.add_argument("-y", "--dry-run", help="don't write the target data to disk", action="store_true")
     p.add_argument("-s", "--segments", help="load segments from file instead of stdin", type=open, default=sys.stdin)
+    p.add_argument("--preserve-marked", help="copy marked point process datasets over without selecting", action="store_true")
 
     p.add_argument("src", help="the input ARF file")
     p.add_argument("tgt", help="the output ARF file (will be overwritten)")
@@ -68,23 +69,28 @@ def main(argv=None):
             log.info(" - %s: [%s, %s) -> %s", entry_name, interval["begin"], interval["end"], tgt_entry_name)
             tgt_entry = arf.create_entry(tgt_file, tgt_entry_name, **src_entry_attrs)
             for name, src_dset in src_entry.items():
-                if args.channels is None or name in args.channels:
-                    log.info("    - %s", name)
-                    src_dset_attrs = dict(src_dset.attrs)
-                    src_dset_offset = src_dset_attrs.pop("offset", 0)
-                    selected, offset = arf.select_interval(src_dset,
-                                                           interval["begin"],
-                                                           interval["end"])
-                    # this is to deal with jrecord-generated files that violate
-                    # spec on the units field
-                    if arf.is_marked_pointproc(src_dset):
+                if args.channels is not None and name not in args.channels:
+                    continue
+                log.info("    - %s", name)
+                src_dset_attrs = dict(src_dset.attrs)
+                src_dset_offset = src_dset_attrs.pop("offset", 0)
+                if arf.is_marked_pointproc(src_dset):
+                    if args.preserve_marked:
+                        tgt_file.copy(src_dset, tgt_entry, name=name)
+                        continue
+                    else:
                         src_units = src_dset_attrs.pop("units")
                         req = len(src_dset.dtype.names)
                         if isinstance(src_units, str) or len(src_units) != req:
                             src_dset_attrs["units"] = [src_units] + [""] * (req - 1)
-                    arf.create_dataset(tgt_entry, name, selected,
-                                       offset=offset + src_dset_offset,
-                                       **src_dset_attrs)
+                selected, offset = arf.select_interval(src_dset,
+                                                       interval["begin"],
+                                                       interval["end"])
+                # this is to deal with jrecord-generated files that violate
+                # spec on the units field
+                arf.create_dataset(tgt_entry, name, selected,
+                                   offset=offset + src_dset_offset,
+                                   **src_dset_attrs)
             tgt_entry_index += 1
 
         except json.JSONDecodeError:
