@@ -90,6 +90,7 @@ setup(
                                       'arfxplog = arfx.arfxplog:arfxplog',
                                       'arfx-migrate = arfx.migrate:migrate_script',
                                       'arfx-split = arfx.splitter:main',
+                                      'arfx-select = arfx.select:main',
                                       'arfx-collect-sampled = arfx.collect:collect_sampled_script',
                   ],
                   },
