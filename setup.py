@@ -46,7 +46,11 @@ class BuildExt(build_ext):
     def build_extensions(self):
         import numpy
         import pkgconfig
-        compiler_settings = pkgconfig.parse("hdf5")
+        from collections import defaultdict
+        try:
+            compiler_settings = pkgconfig.parse("hdf5")
+        except pkgconfig.PackageNotFoundError:
+            compiler_settings = defaultdict(list)
         # macports doesn't install the pkgconfig file for some reason
         if sys.platform == 'darwin':
             compiler_settings['include_dirs'].append('/opt/local/include')
