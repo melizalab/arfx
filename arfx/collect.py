@@ -116,7 +116,6 @@ def collect_sampled_script(argv=None):
     p.add_argument("outfile", help="the output file (will be overwritten)")
 
     args = p.parse_args(argv)
-
     setup_log(log, args.verbose)
 
     with arf.open_file(args.arffile, "r") as arfp:
