@@ -34,6 +34,7 @@ def main(argv=None):
     p.add_argument("-c", "--channels", help="list of channels to select (default all)",
                    metavar='CHANNEL', nargs="+")
     p.add_argument("-y", "--dry-run", help="don't write the target data to disk", action="store_true")
+    p.add_argument("-s", "--segments", help="load segments from file instead of stdin", type=open, default=sys.stdin)
 
     p.add_argument("src", help="the input ARF file")
     p.add_argument("tgt", help="the output ARF file (will be overwritten)")
@@ -54,7 +55,7 @@ def main(argv=None):
         tgt_file = arf.open_file(args.tgt, mode="w")
 
     tgt_entry_index = 0
-    for line in sys.stdin:
+    for line in args.segments:
         try:
             interval = json.loads(line)
             if isinstance(interval["entry"], int):
@@ -74,6 +75,13 @@ def main(argv=None):
                     selected, offset = arf.select_interval(src_dset,
                                                            interval["begin"],
                                                            interval["end"])
+                    # this is to deal with jrecord-generated files that violate
+                    # spec on the units field
+                    if arf.is_marked_pointproc(src_dset):
+                        src_units = src_dset_attrs.pop("units")
+                        req = len(src_dset.dtype.names)
+                        if isinstance(src_units, str) or len(src_units) != req:
+                            src_dset_attrs["units"] = [src_units] + [""] * (req - 1)
                     arf.create_dataset(tgt_entry, name, selected,
                                        offset=offset + src_dset_offset,
                                        **src_dset_attrs)
@@ -97,4 +105,4 @@ def main(argv=None):
 
 
 if __name__=="__main__":
-    sys.exit(main(sys.argv))
+    main()
