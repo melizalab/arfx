@@ -87,7 +87,6 @@ setup(
                               '.pcmseq2 = arfx.pcmseqio:pseqfile',
                               ],
                   'console_scripts': ['arfx = arfx.core:arfx',
-                                      'arfxplog = arfx.arfxplog:arfxplog',
                                       'arfx-migrate = arfx.migrate:migrate_script',
                                       'arfx-split = arfx.splitter:main',
                                       'arfx-select = arfx.select:main',
