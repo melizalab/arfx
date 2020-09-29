@@ -1,4 +1,4 @@
-arf @ file:///Users/dmeliza/Devel/arf/dist/arf-2.6.0-py2.py3-none-any.whl
+arf==2.6.0
 ewave==1.0.5
 h5py==2.10.0
 numpy==1.19.2
