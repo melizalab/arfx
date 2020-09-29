@@ -3,20 +3,10 @@
 # -*- mode: python -*-
 import sys
 from setuptools import setup, find_packages, Extension
+from distutils.command.build_ext import build_ext
 
-if sys.version_info[:2] < (2, 7) or (3, 0) <= sys.version_info[:2] < (3, 4):
-    raise RuntimeError("Python version 2.7 or >= 3.4 required.")
-
-try:
-    from Cython.Distutils import build_ext
-    SUFFIX = '.pyx'
-except ImportError:
-    from distutils.command.build_ext import build_ext
-    SUFFIX = '.c'
-
-import sys
-
-# --- Distutils setup and metadata --------------------------------------------
+if sys.version_info[:2] < (3, 6):
+    raise RuntimeError("Python version 3.6 or greater required.")
 
 from arfx import __version__
 
@@ -45,15 +35,7 @@ entry, which is a set of data channels that all start at the same time.
 class BuildExt(build_ext):
     def build_extensions(self):
         import numpy
-        import pkgconfig
-        from collections import defaultdict
-        try:
-            compiler_settings = pkgconfig.parse("hdf5")
-        except pkgconfig.PackageNotFoundError:
-            compiler_settings = defaultdict(list)
-        # macports doesn't install the pkgconfig file for some reason
-        if sys.platform == 'darwin':
-            compiler_settings['include_dirs'].append('/opt/local/include')
+        compiler_settings = {'include_dirs': []}
         compiler_settings['include_dirs'].insert(0, "include")
         compiler_settings['include_dirs'].append(numpy.get_include())
         c_opts = []
@@ -78,9 +60,8 @@ setup(
 
     packages=find_packages(exclude=["*test*"]),
     ext_modules=[Extension('arfx.pcmseqio',
-                           sources=['src/pcmseqio.c', 'src/pcmseq.c']),
-                 Extension('arfx.h5vlen',
-                           sources=['src/h5vlen' + SUFFIX])],
+                           sources=['src/pcmseqio.c', 'src/pcmseq.c']),],
+
     cmdclass={'build_ext': BuildExt},
 
     entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
@@ -98,9 +79,8 @@ setup(
                   ],
                   },
 
-    setup_requires=["pkgconfig>=1.2"],
-    install_requires=["arf>=2.3", "ewave>=1.0.4", "numpy>=1.10"],
-    test_suite='nose.collector'
+    install_requires=["arf>=2.6", "ewave>=1.0.5"],
+    test_suite='tests'
 )
 # Variables:
 # End:

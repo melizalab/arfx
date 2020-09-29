@@ -9,11 +9,10 @@ on [HDF5](http://www.hdfgroup.org/HDF5).
 
 ### requirements
 
--   Python 2.7 or >=3.4
--   numpy>=1.10
--   arf>=2.2+ (<https://github.com/melizalab/arf>)
--   ewave>=1.0.4+ (<https://github.com/melizalab/py-ewave>)
--   pkgconfig >=1.2
+-   Python 3.6 or greater
+-   numpy>=1.19
+-   arf>=2.6 (<https://github.com/melizalab/arf>)
+-   ewave>=1.0.5 (<https://github.com/melizalab/py-ewave>)
 
 ### installation
 
@@ -74,9 +73,8 @@ which can speed up I/O operations slightly.
 
 Currently only one sampled dataset per entry is supported. Clearly this does not
 encompass many use cases, but **arfx** is intended as a simple tool. More
-
 specialized import procedures can be easily written in Python using the `arf`
-API.
+library.
 
 ###### output files
 
@@ -118,7 +116,7 @@ The `--write-attr` operation can be used to store the contents of text files in 
 
 ### other utilities
 
-This package comes with a few scripts that do fairly specific operations.
+This package comes with a few additional scripts that do fairly specific operations.
 
 #### arfx-split
 

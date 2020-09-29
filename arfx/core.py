@@ -29,7 +29,7 @@ import h5py as h5
 import arf
 from . import io
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
