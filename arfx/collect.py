@@ -5,9 +5,6 @@ Specialized script to collect data across channels and entries
 
 Copyright (C) 2018 Dan Meliza <dan // AT // meliza.org>
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
 
 import operator
 import numpy as np
@@ -18,6 +15,7 @@ from .core import __version__, setup_log
 from . import io
 
 log = logging.getLogger("arfx-collect")
+
 
 def any_type(dset):
     return True

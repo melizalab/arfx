@@ -35,9 +35,9 @@ entry, which is a set of data channels that all start at the same time.
 class BuildExt(build_ext):
     def build_extensions(self):
         import numpy
-        compiler_settings = {'include_dirs': []}
-        compiler_settings['include_dirs'].insert(0, "include")
-        compiler_settings['include_dirs'].append(numpy.get_include())
+        compiler_settings = {"include_dirs": []}
+        compiler_settings["include_dirs"].insert(0, "include")
+        compiler_settings["include_dirs"].append(numpy.get_include())
         c_opts = []
         for ext in self.extensions:
             for k, v in compiler_settings.items():
@@ -47,40 +47,42 @@ class BuildExt(build_ext):
 
 
 setup(
-    name='arfx',
+    name="arfx",
     version=__version__,
     description=short_desc,
     long_description=long_desc,
     classifiers=[x for x in cls_txt.split("\n") if x],
-    author='Dan Meliza',
+    author="Dan Meliza",
     author_email="dan@meliza.org",
-    maintainer='Dan Meliza',
+    maintainer="Dan Meliza",
     maintainer_email="dan@meliza.org",
     url="https://github.com/melizalab/arfx",
 
     packages=find_packages(exclude=["*test*"]),
-    ext_modules=[Extension('arfx.pcmseqio',
-                           sources=['src/pcmseqio.c', 'src/pcmseq.c']),],
+    ext_modules=[Extension("arfx.pcmseqio",
+                           sources=["src/pcmseqio.c", "src/pcmseq.c"]),],
 
-    cmdclass={'build_ext': BuildExt},
+    cmdclass={"build_ext": BuildExt},
 
-    entry_points={'arfx.io': ['.pcm = arfx.pcmio:pcmfile',
-                              '.dat = arfx.pcmio:pcmfile',
-                              '.wav = ewave:wavfile',
-                              '.pcm_seq2 = arfx.pcmseqio:pseqfile',
-                              '.pcm_seq = arfx.pcmseqio:pseqfile',
-                              '.pcmseq2 = arfx.pcmseqio:pseqfile',
+    entry_points={"arfx.io": [".pcm = arfx.pcmio:pcmfile",
+                              ".dat = arfx.pcmio:pcmfile",
+                              ".wav = ewave:wavfile",
+                              ".pcm_seq2 = arfx.pcmseqio:pseqfile",
+                              ".pcm_seq = arfx.pcmseqio:pseqfile",
+                              ".pcmseq2 = arfx.pcmseqio:pseqfile",
                               ],
-                  'console_scripts': ['arfx = arfx.core:arfx',
-                                      'arfx-migrate = arfx.migrate:migrate_script',
-                                      'arfx-split = arfx.splitter:main',
-                                      'arfx-select = arfx.select:main',
-                                      'arfx-collect-sampled = arfx.collect:collect_sampled_script',
+                  "console_scripts": ["arfx = arfx.core:arfx",
+                                      "arfx-migrate = arfx.migrate:migrate_script",
+                                      "arfx-split = arfx.splitter:main",
+                                      "arfx-select = arfx.select:main",
+                                      "arfx-collect-sampled = arfx.collect:collect_sampled_script",
+                                      "arfx-oephys = arfx.oephys:script",
+
                   ],
                   },
 
     install_requires=["arf>=2.6", "ewave>=1.0.5"],
-    test_suite='tests'
+    test_suite="tests"
 )
 # Variables:
 # End:
