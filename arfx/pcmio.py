@@ -6,13 +6,11 @@ Read and write raw binary format files
 Copyright (C) 2012 Dan Meliza <dan // AT // meliza.org>
 Created 2012-03-29
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
+import sys
 from ewave import rescale
 
 
-class pcmfile(object):
+class pcmfile:
     """Provides access to sampled data in raw binary format
 
     Raw binary files store sampled data as a continuous little-endian array. The
@@ -37,11 +35,6 @@ class pcmfile(object):
 
     def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, byteorder='<',
                  **kwargs):
-        import sys
-        if sys.version > '3':
-            from builtins import open
-        else:
-            from __builtin__ import open
         from numpy import dtype as ndtype
         # validate arguments
         self._dtype = ndtype(dtype).newbyteorder(byteorder)
@@ -51,10 +44,6 @@ class pcmfile(object):
         if hasattr(file, 'read'):
             self.fp = file
         else:
-            try:
-                file = file.encode(sys.getfilesystemencoding())
-            except (UnicodeError, LookupError):
-                pass
             if mode not in ('r', 'r+', 'w', 'w+'):
                 raise ValueError("Invalid mode (use 'r', 'r+', 'w', 'w+')")
             self.fp = open(file, mode=mode + 'b')
@@ -64,7 +53,6 @@ class pcmfile(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.fp.close()
-        return exc_val
 
     @property
     def filename(self):
@@ -156,7 +144,7 @@ class pcmfile(object):
     def write(self, data, scale=True):
         """Write data to the end of the file
 
-        This function can be called serially to store data in chunks. Each chunk
+        This function can be called repeatedly to store data in chunks. Each chunk
         is appended at the end of the file.
 
         - data : input data, in any form that can be converted to an array with
@@ -180,11 +168,10 @@ class pcmfile(object):
             data = asarray(data, self._dtype)
 
         self.fp.seek(0, 2)
-        self.fp.write(data.flatten().tostring())
+        self.fp.write(memoryview(data).cast('B'))
         return self
 
 
-open = pcmfile
 
 # Variables:
 # End:

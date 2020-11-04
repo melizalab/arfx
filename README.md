@@ -142,10 +142,9 @@ or appending (`a`). Must throw an `IOError` if the file does not exist or cannot
 be created, and a `ValueError` if the specified value for `mode` is not
 supported. The additional `attributes` arguments specify metadata to be stored
 in the file when created. **arfx** will pass all attributes of the channel and
-entry will attempt to set `channels`, `sampling_rate`, `units`, and `datatype`
-values in files opened for writing. This method may issue a `ValueError` if the
+entry (e.g., `channels`, `sampling_rate`, `units`, and `datatype`) when opening a file for writing. This method may issue a `ValueError` if the
 caller fails to set a required attribute, or attempts to set an attribute
-inconsistent with the data format.
+inconsistent with the data format. Unsupported attributes should be ignored.
 
 `read()`: Reads the contents of the opened file and returns the data in a format suitable
 for storage in an ARF file. Specifically, it must be an acceptable type for the
