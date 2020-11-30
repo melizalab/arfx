@@ -73,7 +73,10 @@ def entry_repr(entry):
         out += ", type %s" % datatypes[dset.attrs.get('datatype',
                                                       arf.DataTypes.UNDEFINED)]
         if dset.compression:
-            out += " [%s%d]" % (dset.compression, dset.compression_opts)
+            if dset.compression_opts is not None:
+                out += " [%s%d]" % (dset.compression, dset.compression_opts)
+            else:
+                out += " [%s%d]" % (dset.compression)
     return out
 
 
