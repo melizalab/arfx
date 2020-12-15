@@ -6,6 +6,8 @@ Implementation is based on https://numpy.org/devdocs/reference/generated/numpy.l
 """
 import sys
 
+from .io import is_appendable, extended_shape
+
 class npyfile:
     """Provides access to sampled data in numpy format
 
@@ -17,7 +19,7 @@ class npyfile:
     N is the number of channels and T is the number of samples.
 
     file:          the path of the file to open
-    mode:          the mode to open the file.
+    mode:          the mode to open the file ('r' or 'w')
     sampling_rate: specify the sampling rate of the data. this has no effect on the file.
 
     additional keyword arguments are ignored
@@ -89,20 +91,3 @@ class npyfile:
         self.fp.write(header)
         self.fp.write(b" " * padlen)
         self.fp.write(b"\n")
-
-
-def is_appendable(shape1, shape2):
-    """ Returns true if two array shapes are the same except for the first dimension """
-    from itertools import zip_longest
-    return all(a == b for i, (a, b) in enumerate(zip_longest(shape1, shape2, fillvalue=1)) if i > 0)
-
-
-def extended_shape(shape1, shape2):
-    from itertools import zip_longest
-    for i, (a, b) in enumerate(zip_longest(shape1, shape2, fillvalue=1)):
-        if i == 0:
-            yield a + b
-        elif a == b:
-            yield a
-        else:
-            raise ValueError("data shape is not compatible with previously written data")
