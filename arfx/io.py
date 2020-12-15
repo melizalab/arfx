@@ -36,7 +36,10 @@ def open(filename, *args, **kwargs):
 def is_appendable(shape1, shape2):
     """ Returns true if two array shapes are the same except for the first dimension """
     from itertools import zip_longest
-    return all(a == b for i, (a, b) in enumerate(zip_longest(shape1, shape2, fillvalue=1)) if i > 0)
+    return all(a == b
+               for i, (a, b)
+               in enumerate(zip_longest(shape1, shape2, fillvalue=1))
+               if i > 0)
 
 
 def extended_shape(shape1, shape2):

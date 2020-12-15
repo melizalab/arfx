@@ -47,6 +47,7 @@ class mdafile:
     def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', **kwargs):
         # validate arguments
         self.sampling_rate = sampling_rate
+        self.filename = file
         self.mode = mode
 
         if mode in ("w", "r"):
@@ -83,11 +84,17 @@ class mdafile:
     def _write_header(self, dtype, shape):
         import struct
         # TODO: use 64-bit dimensions, once mountainlab actually supports this
-        ndim = len(shape)
-        header = struct.pack(b"<lll" + b"L" * ndim,
+        self.dtype = dtype
+        if len(shape) > 2:
+            raise ValueError("data must be no more than 2 dimensions")
+        self.nframes = shape[0]
+        if len(shape) == 1:
+            shape = (shape[0], 1)
+        self.nframes, self.nchannels = shape
+        header = struct.pack(b"<lllLL",
                              DTYPE_NUM[dtype.name],
                              dtype.itemsize,
-                             ndim,
+                             2,
                              *reversed(shape))
         self.fp.seek(0, 0)
         self.fp.write(header)
@@ -147,10 +154,9 @@ class mdafile:
             # empty file
             self._write_header(data.dtype, data.shape)
         else:
-            self._read_header()
             if self.dtype != data.dtype:
                 raise ValueError("data type is not compatible with previously written data")
-            shape = tuple(extended_shape(self.shape, data.shape))
+            shape = tuple(extended_shape((self.nframes, self.nchannels), data.shape))
             self._write_header(data.dtype, shape)
             self.fp.seek(0, 2)
 

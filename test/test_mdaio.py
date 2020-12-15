@@ -35,7 +35,7 @@ class TestMda(unittest.TestCase):
             self.assertEqual(fp.filename, self.test_file)
             self.assertEqual(fp.sampling_rate, 20000)
             self.assertEqual(fp.mode, "r")
-            data = fp.read(mmap_mode="r")
+            data = fp.read(memmap="r")
             self.assertEqual(data.dtype, to_write.dtype)
             self.assertEqual(data.size, to_write.size)
             self.assertTrue(np.all(data == to_write))
@@ -50,7 +50,7 @@ class TestMda(unittest.TestCase):
         expected = np.concatenate((to_write, to_write))
         with mdaio.mdafile(self.test_file, mode="r") as fp:
             self.assertEqual(fp.mode, "r")
-            data = fp.read(mmap_mode="r")
+            data = fp.read(memmap="r")
             self.assertEqual(data.dtype, to_write.dtype)
             self.assertEqual(data.size, expected.size)
             self.assertTrue(np.all(data == expected))
