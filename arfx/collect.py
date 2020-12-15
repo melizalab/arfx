@@ -5,7 +5,7 @@ Specialized script to collect data across channels and entries
 
 Copyright (C) 2018 Dan Meliza <dan // AT // meliza.org>
 """
-
+import os
 import operator
 import numpy as np
 import logging
@@ -126,13 +126,16 @@ def collect_sampled_script(argv=None):
                    help="convert data to specified type (default is to use as stored)")
     p.add_argument("--chunk-size", type=int, default=1 << 22,
                    help="minimum chunk size for processing long datasets")
-    # p.add_argument("-b", "--bark", help="output bark meta.yml file", action="store_true")
+
     p.add_argument("-c", "--channels", metavar='CHANNEL', nargs="+", default=[],
                    help="list of channels to unpack (default all)")
     p.add_argument("-C", "--channel-file",
                    help="file with list of channels to unpack, one per line")
     p.add_argument('-e', '--entries', help="list of entries to unpack (default all)",
                    metavar='ENTRY', nargs='+')
+
+    p.add_argument("--mountain-params", action="store_true",
+                   help="create mountainlab params.json file")
 
     p.add_argument("arffile", help="the ARF file to unpack")
     p.add_argument("outfile", help="the output file (will be overwritten)")
@@ -169,6 +172,13 @@ def collect_sampled_script(argv=None):
         log.info(" - channels (%d):", nchannels)
         for cname in natsorted(channel_props):
             log.info("    - %s", cname)
+        if args.mountain_params:
+            import json
+            path = os.path.join(os.path.dirname(args.outfile), "params.json")
+            log.info("writing mountainlab metadata to '%s'", path)
+            data = { "samplerate": int(sampling_rate), "spike_sign": -1 }
+            with open(path, "wt") as jfp:
+                json.dump(data, jfp)
         log.info("opening '%s' for output", args.outfile)
         log.info(" - sampling rate = %f", sampling_rate)
         log.info(" - dtype = '%s'", dtype)
