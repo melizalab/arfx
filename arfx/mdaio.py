@@ -60,44 +60,10 @@ class mdafile:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.fp.close()
 
-    @property
-    def filename(self):
-        """ The path of the file """
-        return self.fp.name
-
-    @property
-    def mode(self):
-        """ The mode for the file """
-        return self.fp.mode.replace('b', '')
-
-    @property
-    def nchannels(self):
-        return self._nchannels
-
-    @property
-    def nframes(self):
-        pass
-
-    @property
-    def dtype(self):
-        """ Data storage type """
-        pass
-
-    def __repr__(self):
-        return "<open %s.%s %s, mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>" % \
-            (self.__class__.__module__,
-             self.__class__.__name__,
-             self.filename,
-             self.mode,
-             self.dtype,
-             self.nchannels,
-             self.sampling_rate,
-             hex(id(self)))
-
     def _read_header(self):
         import struct
-        fp.seek(0, 0)
-        dt_code, itemsize, ndims = struct.unpack(b"<lll", fp.read(12))
+        self.fp.seek(0, 0)
+        dt_code, itemsize, ndims = struct.unpack(b"<lll", self.fp.read(12))
         try:
             self.dtype = np.dtype(NUM_DTYPE[dt_code])
         except KeyError:
@@ -106,26 +72,25 @@ class mdafile:
         if ndims < 0:
             ndims = abs(ndims)
             fmt = b"<" + b"Q" * ndims
-            shape = struct.unpack(fmt, fp.read(8 * ndims))
+            shape = struct.unpack(fmt, self.fp.read(8 * ndims))
         else:
             fmt = b"<" + b"L" * ndims
-            shape = struct.unpack(fmt, fp.read(4 * ndims))
+            shape = struct.unpack(fmt, self.fp.read(4 * ndims))
         if ndims > 2:
             raise ValueError("data must be no more than 2 dimensions")
         self.nchannels, self.nframes = shape
 
-
     def _write_header(self, dtype, shape):
         import struct
-        # always use 64-bit dimensions for compatibility
+        # TODO: use 64-bit dimensions, once mountainlab actually supports this
         ndim = len(shape)
-        header = struct.pack(b"<lll" + b"Q" * ndim,
-                             DTYPE_NUM(dtype),
+        header = struct.pack(b"<lll" + b"L" * ndim,
+                             DTYPE_NUM[dtype.name],
                              dtype.itemsize,
-                             -ndim,
-                             *shape)
-        fp.seek(0, 0)
-        fp.write(header)
+                             ndim,
+                             *reversed(shape))
+        self.fp.seek(0, 0)
+        self.fp.write(header)
 
     def read(self, frames=None, offset=0, memmap='c'):
         """
@@ -182,7 +147,7 @@ class mdafile:
             # empty file
             self._write_header(data.dtype, data.shape)
         else:
-            self._read_header():
+            self._read_header()
             if self.dtype != data.dtype:
                 raise ValueError("data type is not compatible with previously written data")
             shape = tuple(extended_shape(self.shape, data.shape))
