@@ -67,6 +67,7 @@ setup(
     entry_points={"arfx.io": [".pcm = arfx.pcmio:pcmfile",
                               ".dat = arfx.pcmio:pcmfile",
                               ".npy = arfx.npyio:npyfile",
+                              ".mda = arfx.mdaio:mdafile",
                               ".wav = ewave:wavfile",
                               ".pcm_seq2 = arfx.pcmseqio:pseqfile",
                               ".pcm_seq = arfx.pcmseqio:pseqfile",
