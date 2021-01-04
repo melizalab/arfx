@@ -263,7 +263,7 @@ def create_and_add_entries(tgt, files, **options):
     add_entries(tgt, files, **options)
 
 
-def extract_entries(src, entries, **options):
+def extract_entries(src, entries, channels=None, **options):
     """
     Extract entries from a file.  The format and naming of the output
     containers is determined automatically from the name of the entry
@@ -291,6 +291,9 @@ def extract_entries(src, entries, **options):
             mtime = attrs.get('timestamp', [None])[0]
             if entries is None or ename in entries:
                 for channel in entry:
+                    if channels is not None and channel not in channels:
+                        log.debug("%s -> skipped (not requested)", channel)
+                        continue
                     dset = entry[channel]
                     attrs.update(
                         nchannels=dset.shape[1] if len(dset.shape) > 1 else 1,
@@ -599,6 +602,8 @@ def arfx():
                    action='store_true', dest='verbose')
     g.add_argument('-n', help='name entries or files using %(metavar)s',
                    metavar='TEMPLATE', dest='template')
+    g.add_argument('-C', help='during extraction, include this channel (default all)',
+                   metavar='CHANNEL', dest='channels', nargs="+")
     g.add_argument('-T', help='specify data type (see --help-datatypes)',
                    default=arf.DataTypes.UNDEFINED, metavar='DATATYPE', dest='datatype', action=ParseDataType)
     g.add_argument(
