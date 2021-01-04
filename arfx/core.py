@@ -570,6 +570,9 @@ def arfx():
     p.add_argument('--help-datatypes',
                    help='print available datatypes and exit',
                    action='version', version=arf.DataTypes._doc())
+    p.add_argument('--help-formats',
+                   help="list supported file types and exit",
+                   action="version", version=io.list_plugins())
 
     # operations
     pp = p.add_argument_group('Operations')

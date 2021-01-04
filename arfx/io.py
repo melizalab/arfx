@@ -33,6 +33,12 @@ def open(filename, *args, **kwargs):
     return cls(filename, *args, **kwargs)
 
 
+def list_plugins():
+    """ Returns a printable list of plugins registered to the arfx.io entry point """
+    from pkg_resources import iter_entry_points
+    return "Supported file formats: " + " ".join(ep.name for ep in iter_entry_points(_entrypoint))
+
+
 def is_appendable(shape1, shape2):
     """ Returns true if two array shapes are the same except for the first dimension """
     from itertools import zip_longest
