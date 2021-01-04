@@ -28,14 +28,35 @@ def main(argv=None):
     from arfx.core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-select", description=__doc__)
-    p.add_argument('--version', action="version",
-                   version="%(prog)s " + __version__)
-    p.add_argument('-v', '--verbose', help="show verbose log messages", action="store_true")
-    p.add_argument("-c", "--channels", help="list of channels to select (default all)",
-                   metavar='CHANNEL', nargs="+")
-    p.add_argument("-y", "--dry-run", help="don't write the target data to disk", action="store_true")
-    p.add_argument("-s", "--segments", help="load segments from file instead of stdin", type=open, default=sys.stdin)
-    p.add_argument("--preserve-marked", help="copy marked point process datasets over without selecting", action="store_true")
+    p.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    p.add_argument(
+        "-v", "--verbose", help="show verbose log messages", action="store_true"
+    )
+    p.add_argument(
+        "-c",
+        "--channels",
+        help="list of channels to select (default all)",
+        metavar="CHANNEL",
+        nargs="+",
+    )
+    p.add_argument(
+        "-y",
+        "--dry-run",
+        help="don't write the target data to disk",
+        action="store_true",
+    )
+    p.add_argument(
+        "-s",
+        "--segments",
+        help="load segments from file instead of stdin",
+        type=open,
+        default=sys.stdin,
+    )
+    p.add_argument(
+        "--preserve-marked",
+        help="copy marked point process datasets over without selecting",
+        action="store_true",
+    )
 
     p.add_argument("src", help="the input ARF file")
     p.add_argument("tgt", help="the output ARF file (will be overwritten)")
@@ -66,7 +87,13 @@ def main(argv=None):
             src_entry = src[entry_name]
             src_entry_attrs = dict(src_entry.attrs)
             tgt_entry_name = "entry_%05d" % tgt_entry_index
-            log.info(" - %s: [%s, %s) -> %s", entry_name, interval["begin"], interval["end"], tgt_entry_name)
+            log.info(
+                " - %s: [%s, %s) -> %s",
+                entry_name,
+                interval["begin"],
+                interval["end"],
+                tgt_entry_name,
+            )
             tgt_entry = arf.create_entry(tgt_file, tgt_entry_name, **src_entry_attrs)
             for name, src_dset in src_entry.items():
                 if args.channels is not None and name not in args.channels:
@@ -83,14 +110,18 @@ def main(argv=None):
                         req = len(src_dset.dtype.names)
                         if isinstance(src_units, str) or len(src_units) != req:
                             src_dset_attrs["units"] = [src_units] + [""] * (req - 1)
-                selected, offset = arf.select_interval(src_dset,
-                                                       interval["begin"],
-                                                       interval["end"])
+                selected, offset = arf.select_interval(
+                    src_dset, interval["begin"], interval["end"]
+                )
                 # this is to deal with jrecord-generated files that violate
                 # spec on the units field
-                arf.create_dataset(tgt_entry, name, selected,
-                                   offset=offset + src_dset_offset,
-                                   **src_dset_attrs)
+                arf.create_dataset(
+                    tgt_entry,
+                    name,
+                    selected,
+                    offset=offset + src_dset_offset,
+                    **src_dset_attrs
+                )
             tgt_entry_index += 1
 
         except json.JSONDecodeError:
@@ -110,5 +141,5 @@ def main(argv=None):
     return 0
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()

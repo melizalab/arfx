@@ -18,7 +18,7 @@ NUM_DTYPE = {
     -5: "int32",
     -6: "uint16",
     -7: "float64",
-    -8: "uint32"
+    -8: "uint32",
 }
 
 DTYPE_NUM = {v: k for k, v in NUM_DTYPE.items()}
@@ -44,14 +44,15 @@ class mdafile:
     additional keyword arguments are ignored
 
     """
-    def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', **kwargs):
+
+    def __init__(self, file, mode="r", sampling_rate=20000, dtype="h", **kwargs):
         # validate arguments
         self.sampling_rate = sampling_rate
         self.filename = file
         self.mode = mode
 
         if mode in ("w", "r"):
-            self.fp = open(file, mode=mode + 'b')
+            self.fp = open(file, mode=mode + "b")
         else:
             raise ValueError("Invalid mode (use 'r' or 'w')")
 
@@ -63,13 +64,16 @@ class mdafile:
 
     def _read_header(self):
         import struct
+
         self.fp.seek(0, 0)
         dt_code, itemsize, ndims = struct.unpack(b"<lll", self.fp.read(12))
         try:
             self.dtype = np.dtype(NUM_DTYPE[dt_code])
         except KeyError:
             raise ValueError("invalid data type code in header")
-        assert (self.dtype.itemsize == itemsize), "item size does not match header data type"
+        assert (
+            self.dtype.itemsize == itemsize
+        ), "item size does not match header data type"
         if ndims < 0:
             ndims = abs(ndims)
             fmt = b"<" + b"Q" * ndims
@@ -83,6 +87,7 @@ class mdafile:
 
     def _write_header(self, dtype, shape):
         import struct
+
         # TODO: use 64-bit dimensions, once mountainlab actually supports this
         self.dtype = dtype
         if len(shape) > 2:
@@ -91,15 +96,13 @@ class mdafile:
         if len(shape) == 1:
             shape = (shape[0], 1)
         self.nframes, self.nchannels = shape
-        header = struct.pack(b"<lllLL",
-                             DTYPE_NUM[dtype.name],
-                             dtype.itemsize,
-                             2,
-                             *reversed(shape))
+        header = struct.pack(
+            b"<lllLL", DTYPE_NUM[dtype.name], dtype.itemsize, 2, *reversed(shape)
+        )
         self.fp.seek(0, 0)
         self.fp.write(header)
 
-    def read(self, frames=None, offset=0, memmap='c'):
+    def read(self, frames=None, offset=0, memmap="c"):
         """
         Return contents of file. Default is is to memmap the data in
         copy-on-write mode, which means read operations are delayed
@@ -114,6 +117,7 @@ class mdafile:
         """
         from numpy import memmap as mmap
         from numpy import fromfile
+
         if self.mode != "r":
             raise IOError("attempted to read from a file opened in write mode")
         header = self._read_header()
@@ -146,6 +150,7 @@ class mdafile:
                  multichannel files.
         """
         from numpy import isfortran
+
         if isfortran(data):
             raise ValueError("data must be C-contiguous (row-major order)")
         if self.mode != "w":
@@ -155,14 +160,15 @@ class mdafile:
             self._write_header(data.dtype, data.shape)
         else:
             if self.dtype != data.dtype:
-                raise ValueError("data type is not compatible with previously written data")
+                raise ValueError(
+                    "data type is not compatible with previously written data"
+                )
             shape = tuple(extended_shape((self.nframes, self.nchannels), data.shape))
             self._write_header(data.dtype, shape)
             self.fp.seek(0, 2)
 
-        self.fp.write(memoryview(data).cast('B'))
+        self.fp.write(memoryview(data).cast("B"))
         return self
-
 
 
 # Variables:

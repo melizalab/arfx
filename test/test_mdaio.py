@@ -7,15 +7,17 @@ import os
 import numpy as np
 from arfx import mdaio
 
-class TestMda(unittest.TestCase):
 
+class TestMda(unittest.TestCase):
     def setUp(self):
         import tempfile
+
         self.temp_dir = tempfile.mkdtemp()
         self.test_file = os.path.join(self.temp_dir, "test.mda")
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
     def test00_badmode(self):
@@ -24,7 +26,7 @@ class TestMda(unittest.TestCase):
 
     def test01_readwrite(self):
         dtype = "f"
-        to_write = np.random.randint(-2**15, 2**15, (1000, 2)).astype(dtype)
+        to_write = np.random.randint(-(2 ** 15), 2 ** 15, (1000, 2)).astype(dtype)
         with mdaio.mdafile(self.test_file, mode="w", sampling_rate=20000) as ofp:
             self.assertEqual(ofp.filename, self.test_file)
             self.assertEqual(ofp.sampling_rate, 20000)
@@ -42,7 +44,7 @@ class TestMda(unittest.TestCase):
 
     def test02_append(self):
         dtype = "h"
-        to_write = np.random.randint(-2**15, 2**15, (1000, 2)).astype(dtype)
+        to_write = np.random.randint(-(2 ** 15), 2 ** 15, (1000, 2)).astype(dtype)
         with mdaio.mdafile(self.test_file, mode="w", sampling_rate=20000) as ofp:
             ofp.write(to_write)
             ofp.write(to_write)
@@ -65,8 +67,8 @@ class TestMda(unittest.TestCase):
                 ofp.write(to_write_2)
 
     def test04_appendwrongdtype(self):
-        to_write_1 = np.zeros((1000,), dtype='h')
-        to_write_2 = np.zeros((1000,), dtype='f')
+        to_write_1 = np.zeros((1000,), dtype="h")
+        to_write_2 = np.zeros((1000,), dtype="f")
         with mdaio.mdafile(self.test_file, mode="w", sampling_rate=20000) as ofp:
             ofp.write(to_write_1)
             with self.assertRaises(ValueError):

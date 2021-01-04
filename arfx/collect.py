@@ -35,13 +35,17 @@ def all_items_equal(dict, fun):
 
 def channel_properties(entry, channels=None, predicate=any_type):
     """ Returns a dict with channel names and required channel properties """
-    return { name: {"sampling_rate": dset.attrs.get('sampling_rate', None),
-                    "units": dset.attrs.get('units', None),
-                    "dtype": dset.dtype,
-                    "samples": dset.shape[0],
-                    "channels": arf.count_channels(dset)}
-             for name, dset in entry.items()
-             if predicate(dset) and (channels is None or name in channels)}
+    return {
+        name: {
+            "sampling_rate": dset.attrs.get("sampling_rate", None),
+            "units": dset.attrs.get("units", None),
+            "dtype": dset.dtype,
+            "samples": dset.shape[0],
+            "channels": arf.count_channels(dset),
+        }
+        for name, dset in entry.items()
+        if predicate(dset) and (channels is None or name in channels)
+    }
 
 
 def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_type):
@@ -66,6 +70,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 
     """
     import h5py as h5
+
     log.info("checking entry consistency")
     # FIXME catch error when file does not track creation order
     entry_names = []
@@ -103,39 +108,68 @@ def iter_entry_chunks(entry, channels, predicate, size):
         log.debug("            - %d - %d", i, i + n)
         for j, chan_name in enumerate(props):
             dset = entry[chan_name]
-            out[:, j] = dset[i:i+n]
+            out[:, j] = dset[i : i + n]
         yield out
 
 
 def collect_sampled_script(argv=None):
     from natsort import natsorted
     import argparse
+
     p = argparse.ArgumentParser(
         prog="arfx-collect-sampled",
         description="Collect sampled data from arf files across channels and entries"
         "into a flat binary array. The output file can be any format that supports multiple channels; "
-        "for example, wav or dat (raw binary)"
+        "for example, wav or dat (raw binary)",
     )
-    p.add_argument('--version', action="version",
-                   version="%(prog)s " + __version__)
-    p.add_argument('-v', '--verbose', help="show verbose log messages", action="store_true")
-    p.add_argument("--dry-run", action="store_true",
-                   help="check entry consistency but don't write file")
+    p.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    p.add_argument(
+        "-v", "--verbose", help="show verbose log messages", action="store_true"
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="check entry consistency but don't write file",
+    )
 
-    p.add_argument("-d", "--dtype",
-                   help="convert data to specified type (default is to use as stored)")
-    p.add_argument("--chunk-size", type=int, default=1 << 22,
-                   help="minimum chunk size for processing long datasets")
+    p.add_argument(
+        "-d",
+        "--dtype",
+        help="convert data to specified type (default is to use as stored)",
+    )
+    p.add_argument(
+        "--chunk-size",
+        type=int,
+        default=1 << 22,
+        help="minimum chunk size for processing long datasets",
+    )
 
-    p.add_argument("-c", "--channels", metavar='CHANNEL', nargs="+", default=[],
-                   help="list of channels to unpack (default all)")
-    p.add_argument("-C", "--channel-file",
-                   help="file with list of channels to unpack, one per line")
-    p.add_argument('-e', '--entries', help="list of entries to unpack (default all)",
-                   metavar='ENTRY', nargs='+')
+    p.add_argument(
+        "-c",
+        "--channels",
+        metavar="CHANNEL",
+        nargs="+",
+        default=[],
+        help="list of channels to unpack (default all)",
+    )
+    p.add_argument(
+        "-C",
+        "--channel-file",
+        help="file with list of channels to unpack, one per line",
+    )
+    p.add_argument(
+        "-e",
+        "--entries",
+        help="list of entries to unpack (default all)",
+        metavar="ENTRY",
+        nargs="+",
+    )
 
-    p.add_argument("--mountain-params", action="store_true",
-                   help="create mountainlab params.json file")
+    p.add_argument(
+        "--mountain-params",
+        action="store_true",
+        help="create mountainlab params.json file",
+    )
 
     p.add_argument("arffile", help="the ARF file to unpack")
     p.add_argument("outfile", help="the output file (will be overwritten)")
@@ -154,10 +188,9 @@ def collect_sampled_script(argv=None):
     with arf.open_file(args.arffile, "r") as arfp:
         log.info("unpacking '%s'", args.arffile)
         arf.check_file_version(arfp)
-        entry_names, channel_props = check_entry_consistency(arfp,
-                                                             args.entries,
-                                                             args.channels,
-                                                             predicate=arf.is_time_series)
+        entry_names, channel_props = check_entry_consistency(
+            arfp, args.entries, args.channels, predicate=arf.is_time_series
+        )
         if not all_items_equal(channel_props, operator.itemgetter("sampling_rate")):
             log.warn(" - warning: not all datasets have the same sampling rate")
         if not all_items_equal(channel_props, operator.itemgetter("units")):
@@ -174,9 +207,10 @@ def collect_sampled_script(argv=None):
             log.info("    - %s", cname)
         if args.mountain_params:
             import json
+
             path = os.path.join(os.path.dirname(args.outfile), "params.json")
             log.info("writing mountainlab metadata to '%s'", path)
-            data = { "samplerate": int(sampling_rate), "spike_sign": -1 }
+            data = {"samplerate": int(sampling_rate), "spike_sign": -1}
             with open(path, "wt") as jfp:
                 json.dump(data, jfp)
         log.info("opening '%s' for output", args.outfile)
@@ -186,10 +220,17 @@ def collect_sampled_script(argv=None):
         if args.dry_run:
             log.info(" - dry run, ending script")
             return
-        with io.open(args.outfile, mode="w",
-                     sampling_rate=sampling_rate, dtype=dtype, nchannels=nchannels) as ofp:
+        with io.open(
+            args.outfile,
+            mode="w",
+            sampling_rate=sampling_rate,
+            dtype=dtype,
+            nchannels=nchannels,
+        ) as ofp:
             for entry_name in natsorted(entry_names):
                 entry = arfp[entry_name]
-                for chunk in iter_entry_chunks(entry, args.channels, arf.is_time_series, args.chunk_size):
+                for chunk in iter_entry_chunks(
+                    entry, args.channels, arf.is_time_series, args.chunk_size
+                ):
 
                     ofp.write(chunk.astype(dtype))

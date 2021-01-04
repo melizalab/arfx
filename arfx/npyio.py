@@ -8,6 +8,7 @@ import sys
 
 from .io import is_appendable, extended_shape
 
+
 class npyfile:
     """Provides access to sampled data in numpy format
 
@@ -25,14 +26,16 @@ class npyfile:
     additional keyword arguments are ignored
 
     """
+
     def __init__(self, file, mode="r", sampling_rate=20000, **kwargs):
         from numpy import load
+
         self.sampling_rate = sampling_rate
         self.filename = file
         self.mode = mode
 
         if mode == "w":
-            self.fp = open(file, mode=mode + 'b')
+            self.fp = open(file, mode=mode + "b")
         elif mode == "r":
             self.data = load(file, mmap_mode="r")
         else:
@@ -53,6 +56,7 @@ class npyfile:
     def write(self, data):
         from numpy import isfortran, save
         from numpy.lib.format import header_data_from_array_1_0
+
         if isfortran(data):
             raise ValueError("data must be C-contiguous (row-major order)")
         if self.mode != "w":
@@ -61,12 +65,16 @@ class npyfile:
             # empty file
             self._write_descr = header_data_from_array_1_0(data)
             self._write_header()
-            self.fp.write(memoryview(data).cast('B'))
+            self.fp.write(memoryview(data).cast("B"))
         else:
-            if self._write_descr['descr'] != header_data_from_array_1_0(data)['descr']:
-                raise ValueError("data type is not compatible with previously written data")
-            self._write_descr['shape'] = tuple(extended_shape(self._write_descr['shape'], data.shape))
-            self.fp.write(memoryview(data).cast('B'))
+            if self._write_descr["descr"] != header_data_from_array_1_0(data)["descr"]:
+                raise ValueError(
+                    "data type is not compatible with previously written data"
+                )
+            self._write_descr["shape"] = tuple(
+                extended_shape(self._write_descr["shape"], data.shape)
+            )
+            self.fp.write(memoryview(data).cast("B"))
             self.fp.seek(0, 0)
             self._write_header()
 
@@ -75,12 +83,15 @@ class npyfile:
         # this is a reimplemntation of npf._wrap_header that pads the header to maximum
         import numpy.lib.format as npf
         import struct
-        ARRAY_ALIGN = 2**16
+
+        ARRAY_ALIGN = 2 ** 16
         version = (1, 0)
         fmt, encoding = npf._header_size_info[version]
         header = repr(self._write_descr).encode(encoding)
         hlen = len(header) + 1
-        padlen = ARRAY_ALIGN - ((npf.MAGIC_LEN + struct.calcsize(fmt) + hlen) % ARRAY_ALIGN)
+        padlen = ARRAY_ALIGN - (
+            (npf.MAGIC_LEN + struct.calcsize(fmt) + hlen) % ARRAY_ALIGN
+        )
         try:
             header_prefix = npf.magic(*version) + struct.pack(fmt, hlen + padlen)
         except struct.error:

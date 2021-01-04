@@ -17,7 +17,8 @@ from distutils.version import StrictVersion
 
 from . import h5vlen
 
-log = logging.getLogger('arfx-migrate')   # root logger
+log = logging.getLogger("arfx-migrate")  # root logger
+
 
 def unpickle_attrs(attrs, old_attrs=None):
     """
@@ -34,7 +35,7 @@ def unpickle_attrs(attrs, old_attrs=None):
     else:
         olda = {}
     for k, v in chain(attrs.iteritems(), olda.iteritems()):
-        if isinstance(v, basestring) and len(v) > 0 and v[-1] == '.':
+        if isinstance(v, basestring) and len(v) > 0 and v[-1] == ".":
             try:
                 val = loads(v)
             except:
@@ -64,23 +65,23 @@ def cvt_11(afp, **kwargs):
     _catalogname = "catalog"
 
     log.info("Upgrading %s to 1.1", afp.filename)
-    recuri = afp.attrs.get('database_uri', None)
+    recuri = afp.attrs.get("database_uri", None)
 
     ecat = afp[_catalogname][::]
     log.info("Upgrading entries")
     for r in ecat:
-        entry = afp[r['name']]
-        for k in ('recid', 'animal', 'experimenter', 'protocol'):
+        entry = afp[r["name"]]
+        for k in ("recid", "animal", "experimenter", "protocol"):
             if k in ecat.dtype.names:
                 entry.attrs[k] = r[k]
         # timestamp requires special processing
-        ts, tsm = r['timestamp'], 0
-        if 'timestamp_m' in r.dtype.names:
-            tsm = r['timestamp_m']
-        entry.attrs['timestamp'] = arf.convert_timestamp((ts, tsm))
+        ts, tsm = r["timestamp"], 0
+        if "timestamp_m" in r.dtype.names:
+            tsm = r["timestamp_m"]
+        entry.attrs["timestamp"] = arf.convert_timestamp((ts, tsm))
 
         if recuri is not None:
-            entry.attrs['recuri'] = recuri
+            entry.attrs["recuri"] = recuri
 
         if not _catalogname in entry:
             log.warn("%s doesn't have a catalog: already upgraded?", entry.name)
@@ -101,34 +102,42 @@ def cvt_11(afp, **kwargs):
             old_nodes.add(new_name)
         # then iterate through channels
         for rr in ccat:
-            node_name = ('node' in ccat.dtype.names) and rr[
-                'node'] or rr['table']
-            datatype = ('datatype' in ccat.dtype.names) and rr[
-                'datatype'] or arf.DataTypes.UNDEFINED
+            node_name = ("node" in ccat.dtype.names) and rr["node"] or rr["table"]
+            datatype = (
+                ("datatype" in ccat.dtype.names)
+                and rr["datatype"]
+                or arf.DataTypes.UNDEFINED
+            )
             old_dset = entry["_arfmigrate_" + node_name]
             dtype, stype, ncol = arf.dataset_properties(old_dset)
-            if dtype == 'event' and stype == 'vlarray':
+            if dtype == "event" and stype == "vlarray":
                 # vlarrays are converted to regular arrays
-                log.info("    %s/%d (vlarray) -> %s", node_name, rr['column'], rr['name'])
-                data = h5vlen.read(old_dset)[rr['column']]
-                new_dset = entry.create_dataset(rr['name'], data=data,
-                                                maxshape=None, chunks=True, compression=False)
-            elif dtype == 'sampled' and ncol > 1:
+                log.info(
+                    "    %s/%d (vlarray) -> %s", node_name, rr["column"], rr["name"]
+                )
+                data = h5vlen.read(old_dset)[rr["column"]]
+                new_dset = entry.create_dataset(
+                    rr["name"], data=data, maxshape=None, chunks=True, compression=False
+                )
+            elif dtype == "sampled" and ncol > 1:
                 # multi-column datasets are split
-                log.info("    %s/%d (ndarray) -> %s", (node_name, rr['column'], rr['name']))
-                data = old_dset[:, rr['column']]
-                sampling_rate = old_dset.attrs['sampling_rate']
+                log.info(
+                    "    %s/%d (ndarray) -> %s", (node_name, rr["column"], rr["name"])
+                )
+                data = old_dset[:, rr["column"]]
+                sampling_rate = old_dset.attrs["sampling_rate"]
                 # don't compress until file is repacked
-                new_dset = entry.create_dataset(rr['name'], data=data,
-                                                maxshape=None, chunks=True, compression=False)
+                new_dset = entry.create_dataset(
+                    rr["name"], data=data, maxshape=None, chunks=True, compression=False
+                )
                 arf.set_attributes(new_dset, sampling_rate=sampling_rate)
 
             else:
                 # all other datatypes can simply be renamed
-                log.info("    %s (%s) -> %s", node_name, dtype, rr['name'])
-                new_dset = entry[rr['name']] = old_dset
+                log.info("    %s (%s) -> %s", node_name, dtype, rr["name"])
+                new_dset = entry[rr["name"]] = old_dset
 
-            arf.set_attributes(new_dset, datatype=datatype, units=rr['units'])
+            arf.set_attributes(new_dset, datatype=datatype, units=rr["units"])
             unpickle_attrs(new_dset.attrs, old_dset.attrs)
 
         log.info("    Removing old datasets")
@@ -139,30 +148,29 @@ def cvt_11(afp, **kwargs):
     log.info("Removing top-level catalog")
     del afp[_catalogname]
     log.info("Fixing top-level attributes")
-    afp.attrs['arf_version'] = '1.1'
-    if 'database_class' in afp.attrs:
-        del afp.attrs['database_class']
-    if 'database_uri' in afp.attrs:
-        del afp.attrs['database_uri']
+    afp.attrs["arf_version"] = "1.1"
+    if "database_class" in afp.attrs:
+        del afp.attrs["database_class"]
+    if "database_uri" in afp.attrs:
+        del afp.attrs["database_uri"]
     unpickle_attrs(afp.attrs)
 
+
 # these are removed in version 2.0
-_pytables_attributes = \
-    dict(
-        file=dict(TITLE='', VERSION='1.0',
-                  CLASS='GROUP', PYTABLES_FORMAT_VERSION='2.0'),
-        group=dict(TITLE='', VERSION='1.0', CLASS='GROUP'),
-        carray=dict(TITLE='', VERSION='1.0', CLASS='CARRAY'),
-        earray=dict(TITLE='', VERSION='1.3', CLASS='EARRAY', EXTDIM=1, FILTERS=1),
-        vlarray=dict(TITLE='', VERSION='1.3', CLASS='VLARRAY'),
-        table=dict(TITLE='', VERSION='2.6', CLASS='TABLE', NROWS=1))  # also need field names
+_pytables_attributes = dict(
+    file=dict(TITLE="", VERSION="1.0", CLASS="GROUP", PYTABLES_FORMAT_VERSION="2.0"),
+    group=dict(TITLE="", VERSION="1.0", CLASS="GROUP"),
+    carray=dict(TITLE="", VERSION="1.0", CLASS="CARRAY"),
+    earray=dict(TITLE="", VERSION="1.3", CLASS="EARRAY", EXTDIM=1, FILTERS=1),
+    vlarray=dict(TITLE="", VERSION="1.3", CLASS="VLARRAY"),
+    table=dict(TITLE="", VERSION="2.6", CLASS="TABLE", NROWS=1),
+)  # also need field names
 
 
 def cvt_11_20(afp, **kwargs):
     """ convert a version 1.1 ARF file to version 2.0 """
 
-    pyt_attr_names = set(k for v in _pytables_attributes.values()
-                         for k in v.keys())
+    pyt_attr_names = set(k for v in _pytables_attributes.values() for k in v.keys())
 
     sampling_rate = kwargs.get("sampling_rate", None)
 
@@ -180,14 +188,17 @@ def cvt_11_20(afp, **kwargs):
         for dname, dset in entry.items():
             for k in dset.attrs:
                 # add a special case for table attributes
-                if k in pyt_attr_names or k.startswith('FIELD'):
+                if k in pyt_attr_names or k.startswith("FIELD"):
                     del dset.attrs[k]
-            if "units" in dset.attrs and dset.attrs["units"] == "samples" \
-               and "sampling_rate" not in dset.attrs:
+            if (
+                "units" in dset.attrs
+                and dset.attrs["units"] == "samples"
+                and "sampling_rate" not in dset.attrs
+            ):
                 if sampling_rate is None:
                     raise ValueError("need sampling rate for %s" % dset.name)
                 log.info("Adding sampling rate to %s", dname)
-                dset.attrs['sampling_rate'] = float(sampling_rate)
+                dset.attrs["sampling_rate"] = float(sampling_rate)
 
             # fix empty dimensions and otherwise repack datasets
             data = dset[:]
@@ -202,20 +213,21 @@ def cvt_11_20(afp, **kwargs):
     for k in afp.attrs:
         if k in pyt_attr_names:
             del afp.attrs[k]
-    afp.attrs['arf_version'] = '2.0'
+    afp.attrs["arf_version"] = "2.0"
 
-converters = [(StrictVersion('1.1'), cvt_11),
-              (StrictVersion('2.0'), cvt_11_20)]
+
+converters = [(StrictVersion("1.1"), cvt_11), (StrictVersion("2.0"), cvt_11_20)]
 
 
 def migrate_file(path, newname=None, **kwargs):
     """ upgrade <path> to current version of ARF. If <newname> is not None, does this on a copy """
     from shutil import copy2
+
     if newname is not None:
         copy2(path, newname)
         path = newname
 
-    fp = hp.File(path, 'r+')
+    fp = hp.File(path, "r+")
     for v, f in converters:
         try:
             file_version = arf.check_file_version(fp)
@@ -232,14 +244,22 @@ def migrate_script(argv=None):
     import argparse
     from .core import __version__, repack_file, setup_log
 
-    p = argparse.ArgumentParser(prog="arfx-migrate",
-                                description="migrate older ARF files to %s spec" % arf.spec_version,)
-    p.add_argument('--version', action='version',
-                   version='%(prog)s ' + __version__)
-    p.add_argument('-v', help='verbose output', action='store_true', dest='verbose')
-    p.add_argument('--sampling-rate', help="specify sampling rate if missing", type=float)
-    p.add_argument('-z', help="set compression level in migrated file (default: %(default)s)",
-                   type=int, default=1, dest='compress')
+    p = argparse.ArgumentParser(
+        prog="arfx-migrate",
+        description="migrate older ARF files to %s spec" % arf.spec_version,
+    )
+    p.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    p.add_argument("-v", help="verbose output", action="store_true", dest="verbose")
+    p.add_argument(
+        "--sampling-rate", help="specify sampling rate if missing", type=float
+    )
+    p.add_argument(
+        "-z",
+        help="set compression level in migrated file (default: %(default)s)",
+        type=int,
+        default=1,
+        dest="compress",
+    )
     p.add_argument("file", help="the file to migrate")
 
     args = p.parse_args(argv)

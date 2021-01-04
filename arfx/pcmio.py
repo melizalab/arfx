@@ -33,20 +33,29 @@ class pcmfile:
 
     """
 
-    def __init__(self, file, mode='r', sampling_rate=20000, dtype='h', nchannels=1, byteorder='<',
-                 **kwargs):
+    def __init__(
+        self,
+        file,
+        mode="r",
+        sampling_rate=20000,
+        dtype="h",
+        nchannels=1,
+        byteorder="<",
+        **kwargs
+    ):
         from numpy import dtype as ndtype
+
         # validate arguments
         self._dtype = ndtype(dtype).newbyteorder(byteorder)
         self._nchannels = int(nchannels)
         self._framerate = int(sampling_rate)
 
-        if hasattr(file, 'read'):
+        if hasattr(file, "read"):
             self.fp = file
         else:
-            if mode not in ('r', 'r+', 'w', 'w+'):
+            if mode not in ("r", "r+", "w", "w+"):
                 raise ValueError("Invalid mode (use 'r', 'r+', 'w', 'w+')")
-            self.fp = open(file, mode=mode + 'b')
+            self.fp = open(file, mode=mode + "b")
 
     def __enter__(self):
         return self
@@ -62,7 +71,7 @@ class pcmfile:
     @property
     def mode(self):
         """ The mode for the file """
-        return self.fp.mode.replace('b', '')
+        return self.fp.mode.replace("b", "")
 
     @property
     def sampling_rate(self):
@@ -87,23 +96,27 @@ class pcmfile:
         return self._dtype
 
     def __repr__(self):
-        return "<open %s.%s %s, mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>" % \
-            (self.__class__.__module__,
-             self.__class__.__name__,
-             self.filename,
-             self.mode,
-             self.dtype,
-             self.nchannels,
-             self.sampling_rate,
-             hex(id(self)))
+        return (
+            "<open %s.%s %s, mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>"
+            % (
+                self.__class__.__module__,
+                self.__class__.__name__,
+                self.filename,
+                self.mode,
+                self.dtype,
+                self.nchannels,
+                self.sampling_rate,
+                hex(id(self)),
+            )
+        )
 
     def flush(self):
         """ flush data to disk """
-        if hasattr(self, 'fp') and not self.fp.closed:
+        if hasattr(self, "fp") and not self.fp.closed:
             self.fp.flush()
         return self
 
-    def read(self, frames=None, offset=0, memmap='c'):
+    def read(self, frames=None, offset=0, memmap="c"):
         """
         Return contents of file. Default is is to memmap the data in
         copy-on-write mode, which means read operations are delayed
@@ -118,21 +131,26 @@ class pcmfile:
         """
         from numpy import memmap as mmap
         from numpy import fromfile
-        if self.mode == 'w':
-            raise IOError('file is write-only')
-        if self.mode in ('r+', 'w+'):
+
+        if self.mode == "w":
+            raise IOError("file is write-only")
+        if self.mode in ("r+", "w+"):
             self.fp.flush()
         # find offset
         if frames is None:
             frames = self.nframes - offset
         if memmap:
-            A = mmap(self.fp, offset=offset, dtype=self._dtype, mode=memmap,
-                     shape=(frames, self.nchannels))
+            A = mmap(
+                self.fp,
+                offset=offset,
+                dtype=self._dtype,
+                mode=memmap,
+                shape=(frames, self.nchannels),
+            )
         else:
             pos = self.fp.tell()
             self.fp.seek(offset)
-            A = fromfile(
-                self.fp, dtype=self._dtype, count=frames * self.nchannels)
+            A = fromfile(self.fp, dtype=self._dtype, count=frames * self.nchannels)
             self.fp.seek(pos)
 
         if self.nchannels > 1:
@@ -159,8 +177,9 @@ class pcmfile:
 
         """
         from numpy import asarray
-        if self.mode == 'r':
-            raise IOError('file is read-only')
+
+        if self.mode == "r":
+            raise IOError("file is read-only")
 
         if scale:
             data = rescale(data, self._dtype)
@@ -168,9 +187,8 @@ class pcmfile:
             data = asarray(data, self._dtype)
 
         self.fp.seek(0, 2)
-        self.fp.write(memoryview(data).cast('B'))
+        self.fp.write(memoryview(data).cast("B"))
         return self
-
 
 
 # Variables:

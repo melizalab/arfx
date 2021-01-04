@@ -7,28 +7,30 @@ import os
 import numpy as np
 from arfx import pcmio
 
-class TestPcm(unittest.TestCase):
 
+class TestPcm(unittest.TestCase):
     def setUp(self):
         import tempfile
-        self.data = np.random.randint(-2**15, 2**15, 1000).astype('h')
+
+        self.data = np.random.randint(-(2 ** 15), 2 ** 15, 1000).astype("h")
         self.temp_dir = tempfile.mkdtemp()
         self.test_file = os.path.join(self.temp_dir, "test.pcm")
 
-
     def tearDown(self):
         import shutil
-        shutil.rmtree(self.temp_dir)
 
+        shutil.rmtree(self.temp_dir)
 
     def readwrite(self, dtype, nchannels):
 
-        with pcmio.pcmfile(self.test_file, mode="w+", sampling_rate=20000, dtype='h', nchannels=1) as fp:
+        with pcmio.pcmfile(
+            self.test_file, mode="w+", sampling_rate=20000, dtype="h", nchannels=1
+        ) as fp:
             self.assertEqual(fp.filename, self.test_file)
             self.assertEqual(fp.sampling_rate, 20000)
             self.assertEqual(fp.mode, "r+")
             self.assertEqual(fp.nchannels, 1)
-            self.assertEqual(fp.dtype.char, 'h')
+            self.assertEqual(fp.dtype.char, "h")
 
             fp.write(self.data)
             self.assertEqual(fp.nframes, self.data.size)
@@ -39,14 +41,13 @@ class TestPcm(unittest.TestCase):
             self.assertEqual(fp.sampling_rate, 20000)
             self.assertEqual(fp.mode, "r")
             self.assertEqual(fp.nchannels, 1)
-            self.assertEqual(fp.dtype.char, 'h')
+            self.assertEqual(fp.dtype.char, "h")
             self.assertEqual(fp.nframes, self.data.size)
             read = fp.read()
             self.assertTrue(np.all(read == self.data))
 
-
     def test01_readwrite(self):
-        dtypes = ('b', 'h', 'i', 'l', 'f', 'd')
+        dtypes = ("b", "h", "i", "l", "f", "d")
         nchannels = (1, 2, 8)
         for dtype in dtypes:
             for nc in nchannels:
@@ -59,7 +60,7 @@ class TestPcm(unittest.TestCase):
 
     def test02_append(self):
         dtype = "h"
-        to_write = np.random.randint(-2**15, 2**15, (1000,)).astype(dtype)
+        to_write = np.random.randint(-(2 ** 15), 2 ** 15, (1000,)).astype(dtype)
         with pcmio.pcmfile(self.test_file, mode="w", sampling_rate=20000) as ofp:
             ofp.write(to_write)
             ofp.write(to_write)

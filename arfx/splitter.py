@@ -21,7 +21,7 @@ import datetime
 import arf
 import h5py as h5
 
-log = logging.getLogger('arfx-split')   # root logger
+log = logging.getLogger("arfx-split")  # root logger
 
 
 def entry_timestamps(arf_file):
@@ -40,7 +40,7 @@ def entry_duration(entry):
         if not arf.is_time_series(dset):
             continue
         samples = dset.shape[0]
-        sampling_rate = dset.attrs['sampling_rate']
+        sampling_rate = dset.attrs["sampling_rate"]
         max_dur = max(max_dur, float(samples / sampling_rate))
     return max_dur
 
@@ -48,10 +48,11 @@ def entry_duration(entry):
 def merge_jill_logs(files):
     """Merge all the 'jill_log' datasets in files"""
     from numpy import concatenate
-    out = [fp['jill_log'] for fp in files if 'jill_log' in fp]
+
+    out = [fp["jill_log"] for fp in files if "jill_log" in fp]
     if len(out) > 0:
         arr = concatenate(out)
-        arr.sort(order=('sec', 'usec'))
+        arr.sort(order=("sec", "usec"))
         return arr
 
 
@@ -60,19 +61,36 @@ def main(argv=None):
     from .core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-split", description=__doc__)
-    p.add_argument('--version', action='version',
-                   version='%(prog)s ' + __version__)
-    p.add_argument('-v', help='verbose output', action='store_true', dest='verbose')
+    p.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    p.add_argument("-v", help="verbose output", action="store_true", dest="verbose")
 
-    p.add_argument("--duration", "-T", help="the maximum duration of entries "
-                   "(default: %(default).2f seconds)", type=float, default=600)
-    p.add_argument("--compress", "-z", help="set compression level in output file "
-                   "(default: %(default)d)", type=int, default=1)
-    p.add_argument("--dry-run", "-n", help="don't actually create the target file or copy data",
-                   action="store_true")
-    p.add_argument("--append", "-a", help="if true, will append data from src to tgt (default "
-                   "is to overwrite). Note that log files are NOT merged in this mode",
-                   action="store_true")
+    p.add_argument(
+        "--duration",
+        "-T",
+        help="the maximum duration of entries " "(default: %(default).2f seconds)",
+        type=float,
+        default=600,
+    )
+    p.add_argument(
+        "--compress",
+        "-z",
+        help="set compression level in output file " "(default: %(default)d)",
+        type=int,
+        default=1,
+    )
+    p.add_argument(
+        "--dry-run",
+        "-n",
+        help="don't actually create the target file or copy data",
+        action="store_true",
+    )
+    p.add_argument(
+        "--append",
+        "-a",
+        help="if true, will append data from src to tgt (default "
+        "is to overwrite). Note that log files are NOT merged in this mode",
+        action="store_true",
+    )
     p.add_argument("src", help="the ARF files to chunk up", nargs="+")
     p.add_argument("tgt", help="the destination ARF file")
 
@@ -82,12 +100,19 @@ def main(argv=None):
     # open all input files and sort entries by timestamp
     log.info("sorting source file entries by timestamp")
     srcs = [h5.File(fname, "r") for fname in args.src]
-    entries = sorted(itertools.chain.from_iterable(entry_timestamps(fp) for fp in srcs),
-                     key=operator.itemgetter(1))
+    entries = sorted(
+        itertools.chain.from_iterable(entry_timestamps(fp) for fp in srcs),
+        key=operator.itemgetter(1),
+    )
     if args.verbose:
         log.debug("entry order:")
         for entry, timestamp in entries:
-            log.debug("  %s%s (time=%s)", os.path.basename(entry.file.filename), entry.name, timestamp)
+            log.debug(
+                "  %s%s (time=%s)",
+                os.path.basename(entry.file.filename),
+                entry.name,
+                timestamp,
+            )
 
     # open output file
     if not args.dry_run:
@@ -101,13 +126,17 @@ def main(argv=None):
             log.info("created destination file: %s", tgt_file.filename)
             jilllog = merge_jill_logs(srcs)
             if jilllog is not None:
-                tgt_file.create_dataset("jill_log", data=jilllog, compression=args.compress)
+                tgt_file.create_dataset(
+                    "jill_log", data=jilllog, compression=args.compress
+                )
                 log.info("merged jill_log datasets")
             tgt_entry_index = 0
 
     # iterate through source entries, then chunk up datasets
     for entry, timestamp in entries:
-        log.info("source entry: %s%s", os.path.basename(entry.file.filename), entry.name)
+        log.info(
+            "source entry: %s%s", os.path.basename(entry.file.filename), entry.name
+        )
         max_duration = entry_duration(entry)
         n_chunks = int(max_duration // args.duration) + 1
         log.debug("  max duration: %3.2f s (chunks=%d)", max_duration, n_chunks)
@@ -132,7 +161,7 @@ def main(argv=None):
                 if not arf.is_time_series(dset):
                     log.debug("    %s: (not sampled)", dset_name)
                     continue
-                sampling_rate = dset.attrs['sampling_rate']
+                sampling_rate = dset.attrs["sampling_rate"]
                 chunk_size = int(args.duration * sampling_rate)
                 start = chunk_size * i
                 stop = min(start + chunk_size, dset.shape[0])
@@ -141,8 +170,13 @@ def main(argv=None):
                 if not args.dry_run:
                     tgt_attrs = dict(dset.attrs)
                     try:
-                        tgt_attrs['origin-uuid'] = tgt_attrs.pop('uuid')
+                        tgt_attrs["origin-uuid"] = tgt_attrs.pop("uuid")
                     except KeyError:
                         pass
-                    arf.create_dataset(tgt_entry, dset_name, data, compression=args.compress,
-                                       **tgt_attrs)
+                    arf.create_dataset(
+                        tgt_entry,
+                        dset_name,
+                        data,
+                        compression=args.compress,
+                        **tgt_attrs
+                    )
