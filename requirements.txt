@@ -1,6 +1,6 @@
 h5py==2.8.0; python_version < '3.8'
 h5py==2.10.0; python_version >= '3.8'
-arf==2.6.1
+arf==2.6.2
 ewave==1.0.5
 numpy==1.19.2
 natsort==7.0.1

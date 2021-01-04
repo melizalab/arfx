@@ -54,7 +54,7 @@ any metadata to be stored in the entry.
 
 ###### input files
 
-**arfx** can read sampled data from `pcm`, `wave`, and `pcmseq2` files. Support
+**arfx** can read sampled data from `pcm`, `wave`, `npy` and `mda` files. Support
 for additional file formats can be added as plugins (see 4).
 
 When adding data to an ARF container (`-c` and `-r` modes), the input files are
