@@ -39,7 +39,7 @@ class continuous_dset(dataset):
         super().__init__(base, structure)
 
         timestamps = np.load(os.path.join(self.path, "timestamps.npy"), mmap_mode="r")
-        self.offset = timestamps[0] / structure["sample_rate"]
+        self.offset = timestamps[0] / structure["sampling_rate"]
 
         datfile = os.path.join(self.path, "continuous.dat")
         data = np.memmap(datfile, dtype="int16", mode="r")
@@ -53,7 +53,7 @@ class continuous_dset(dataset):
             "- %s: array %s @ %.1f/s",
             structure["folder_name"],
             self.data.shape,
-            structure["sample_rate"],
+            structure["sampling_rate"],
         )
 
     def channels(self):
@@ -85,6 +85,7 @@ class event_dset(dataset):
         path = os.path.join(base, "events", structure["folder_name"])
         timestamps = np.load(os.path.join(path, "timestamps.npy"))
         channels = np.load(os.path.join(path, "channels.npy"))
+        self.sampling_rate = structure["sampling_rate"]
         if structure["type"] == "string":
             messages = np.load(os.path.join(path, "text.npy"))
             self.data = np.rec.fromarrays(
@@ -103,7 +104,7 @@ class event_dset(dataset):
             "- %s: array %s @ %.1f/s (compound type)",
             structure["folder_name"],
             self.data.shape,
-            structure["sample_rate"],
+            self.sampling_rate
         )
 
 
@@ -271,7 +272,7 @@ def script(argv=None):
                                 datatype=args.datatype,
                                 offset=dset.offset,
                                 compression=args.compress,
-                                sampling_rate=info.pop("sample_rate", None),
+                                sampling_rate=info.pop("sampling_rate", None),
                                 **info
                             )
                     elif isinstance(dset, event_dset):
@@ -281,7 +282,7 @@ def script(argv=None):
                             name=dset.name,
                             data=dset.data,
                             datatype=arf.DataTypes.EVENT,
-                            sampling_rate=info.pop("sample_rate", None),
+                            sampling_rate=dset.sampling_rate,
                             units=dset.units,
                             **dset.attrs
                         )
