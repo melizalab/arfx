@@ -33,13 +33,14 @@ class continuous_dset(dataset):
         self.path = os.path.join(base, "continuous", structure["folder_name"])
         self.nchannels = structure.pop("num_channels")
         self.channel_attrs = structure.pop("channels")
+        self.sampling_rate = structure.pop("sample_rate")
         assert (
             len(self.channel_attrs) == self.nchannels
         ), "channel metadata doesn't match channel count"
         super().__init__(base, structure)
 
         timestamps = np.load(os.path.join(self.path, "timestamps.npy"), mmap_mode="r")
-        self.offset = timestamps[0] / structure["sampling_rate"]
+        self.offset = timestamps[0] / self.sampling_rate
 
         datfile = os.path.join(self.path, "continuous.dat")
         data = np.memmap(datfile, dtype="int16", mode="r")
@@ -53,7 +54,7 @@ class continuous_dset(dataset):
             "- %s: array %s @ %.1f/s",
             structure["folder_name"],
             self.data.shape,
-            structure["sampling_rate"],
+            self.sampling_rate,
         )
 
     def channels(self):
@@ -63,9 +64,11 @@ class continuous_dset(dataset):
         """
         for i in range(self.nchannels):
             info = self.channel_attrs[i].copy()
-            info.update(self.attrs)
-            info["to_μV"] = info.pop("bit_volts")
-            info["units"] = ""
+            info.update({
+                "sampling_rate": self.sampling_rate,
+                "to_μV": info.pop("bit_volts"),
+                "units": "",
+            })
             yield (self.data[:, i], info)
 
 
@@ -85,7 +88,7 @@ class event_dset(dataset):
         path = os.path.join(base, "events", structure["folder_name"])
         timestamps = np.load(os.path.join(path, "timestamps.npy"))
         channels = np.load(os.path.join(path, "channels.npy"))
-        self.sampling_rate = structure["sampling_rate"]
+        self.sampling_rate = structure["sample_rate"]
         if structure["type"] == "string":
             messages = np.load(os.path.join(path, "text.npy"))
             self.data = np.rec.fromarrays(
