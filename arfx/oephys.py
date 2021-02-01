@@ -34,9 +34,12 @@ class continuous_dset(dataset):
         self.nchannels = structure.pop("num_channels")
         self.channel_attrs = structure.pop("channels")
         self.sampling_rate = structure.pop("sample_rate")
-        assert (
-            len(self.channel_attrs) == self.nchannels
-        ), "channel metadata doesn't match channel count"
+        if len(self.channel_attrs) != self.nchannels:
+            log.warn(
+                "channel metadata count (%d) and data channel count (%d) don't match",
+                len(self.channel_attrs),
+                self.nchannels
+            )
         super().__init__(base, structure)
 
         timestamps = np.load(os.path.join(self.path, "timestamps.npy"), mmap_mode="r")
@@ -62,14 +65,15 @@ class continuous_dset(dataset):
 
         To save space, values are left in native datatype.
         """
-        for i in range(self.nchannels):
-            info = self.channel_attrs[i].copy()
+        for info in self.channel_attrs:
+            info = info.copy()
+            index = info["recorded_processor_index"]
             info.update({
                 "sampling_rate": self.sampling_rate,
                 "to_μV": info.pop("bit_volts"),
                 "units": "",
             })
-            yield (self.data[:, i], info)
+            yield (self.data[:, index], info)
 
 
 class spikes_dset(dataset):
