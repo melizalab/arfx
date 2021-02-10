@@ -106,7 +106,7 @@ def main(argv=None):
                         tgt_file.copy(src_dset, tgt_entry, name=name)
                         continue
                     else:
-                        src_units = src_dset_attrs.pop("units")
+                        src_units = src_dset_attrs.pop("units", "")
                         req = len(src_dset.dtype.names)
                         if isinstance(src_units, str) or len(src_units) != req:
                             src_dset_attrs["units"] = [src_units] + [""] * (req - 1)
