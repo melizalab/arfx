@@ -65,9 +65,9 @@ class continuous_dset(dataset):
 
         To save space, values are left in native datatype.
         """
-        for info in self.channel_attrs:
+        for index, info in enumerate(self.channel_attrs):
             info = info.copy()
-            index = info["recorded_processor_index"]
+            # index = info["recorded_processor_index"]
             info.update(
                 {
                     "sampling_rate": self.sampling_rate,
