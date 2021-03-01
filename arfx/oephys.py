@@ -36,9 +36,9 @@ class continuous_dset(dataset):
         self.sampling_rate = structure.pop("sample_rate")
         if len(self.channel_attrs) != self.nchannels:
             log.warn(
-                "channel metadata count (%d) and data channel count (%d) don't match",
+                "warning: channel metadata count (%d) and data channel count (%d) don't match",
                 len(self.channel_attrs),
-                self.nchannels
+                self.nchannels,
             )
         super().__init__(base, structure)
 
@@ -68,11 +68,13 @@ class continuous_dset(dataset):
         for info in self.channel_attrs:
             info = info.copy()
             index = info["recorded_processor_index"]
-            info.update({
-                "sampling_rate": self.sampling_rate,
-                "to_μV": info.pop("bit_volts"),
-                "units": "",
-            })
+            info.update(
+                {
+                    "sampling_rate": self.sampling_rate,
+                    "to_μV": info.pop("bit_volts"),
+                    "units": "",
+                }
+            )
             yield (self.data[:, index], info)
 
 
@@ -111,7 +113,7 @@ class event_dset(dataset):
             "- %s: array %s @ %.1f/s (compound type)",
             structure["folder_name"],
             self.data.shape,
-            self.sampling_rate
+            self.sampling_rate,
         )
 
 
@@ -196,6 +198,13 @@ def script(argv=None):
         dest="template",
     )
     p.add_argument(
+        "--channel-list",
+        "-C",
+        type=argparse.FileType("r"),
+        help="file with a list of continuous channels to include, one per line. "
+        "All other continuous channels will be excluded.",
+    )
+    p.add_argument(
         "-k",
         metavar="KEY=VALUE",
         dest="attrs",
@@ -236,6 +245,10 @@ def script(argv=None):
     if args.dry_run:
         log.info("DRY RUN")
         fp_args.update(driver="core", backing_store=False)
+    if args.channel_list is not None:
+        cont_channels = [ch.strip("\n") for ch in args.channel_list.readlines()]
+    else:
+        cont_channels = None
 
     with arf.open_file(args.arffile, "a", **fp_args) as fp:
         log.info("Opened '%s' for writing", args.arffile)
@@ -271,7 +284,18 @@ def script(argv=None):
                     elif isinstance(dset, continuous_dset):
                         log.info("  - processing continuous dataset '%s'", dset.name)
                         for (data, info) in dset.channels():
-                            log.info("     - channel '%s'", info["channel_name"])
+                            if (
+                                cont_channels is not None
+                                and info["channel_name"] not in cont_channels
+                            ):
+                                log.info(
+                                    "     - skipping unrequested channel '%s'",
+                                    info["channel_name"],
+                                )
+                                continue
+                            log.info(
+                                "     - storing channel '%s'", info["channel_name"]
+                            )
                             arf.create_dataset(
                                 entry,
                                 name=info["channel_name"],
