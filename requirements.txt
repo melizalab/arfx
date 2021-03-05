@@ -5,3 +5,4 @@ ewave==1.0.5
 numpy==1.19.2
 natsort==7.0.1
 six==1.15.0
+tqdm==4.58.0
