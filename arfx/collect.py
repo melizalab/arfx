@@ -42,6 +42,7 @@ def channel_properties(entry, channels=None, predicate=any_type):
             "dtype": dset.dtype,
             "samples": dset.shape[0],
             "channels": arf.count_channels(dset),
+            "chunksize": dset.chunks[0],
         }
         for name, dset in entry.items()
         if predicate(dset) and (channels is None or name in channels)
@@ -97,12 +98,15 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 
 def iter_entry_chunks(entry, channels, predicate, size):
     """ Iterate through the datasets in entry (that match predicate), yielding chunks """
+    from tqdm import tqdm
+
     props = channel_properties(entry, channels, predicate)
     nchannels = len(props)
     nsamples = first(props, operator.itemgetter("samples"))
     dtype = first(props, operator.itemgetter("dtype"))
+    size = first(props, operator.itemgetter("chunksize"))
     log.info("    - '%s' -> %d samples", entry.name, nsamples)
-    for i in range(0, nsamples, size):
+    for i in tqdm(range(0, nsamples, size), unit="chunk"):
         n = min(size, nsamples - i)
         out = np.empty((n, nchannels), dtype=dtype)
         log.debug("            - %d - %d", i, i + n)
@@ -136,12 +140,6 @@ def collect_sampled_script(argv=None):
         "-d",
         "--dtype",
         help="convert data to specified type (default is to use as stored)",
-    )
-    p.add_argument(
-        "--chunk-size",
-        type=int,
-        default=1 << 22,
-        help="minimum chunk size for processing long datasets",
     )
 
     p.add_argument(
@@ -230,7 +228,6 @@ def collect_sampled_script(argv=None):
             for entry_name in natsorted(entry_names):
                 entry = arfp[entry_name]
                 for chunk in iter_entry_chunks(
-                    entry, args.channels, arf.is_time_series, args.chunk_size
+                    entry, args.channels, arf.is_time_series
                 ):
-
                     ofp.write(chunk.astype(dtype))
