@@ -296,16 +296,25 @@ def script(argv=None):
                             log.info(
                                 "     - storing channel '%s'", info["channel_name"]
                             )
-                            arf.create_dataset(
-                                entry,
+                            # create an empty dataset and fill it in chunks
+                            tgt = entry.create_dataset(
                                 name=info["channel_name"],
-                                data=data,
+                                shape=(data.size,),
+                                dtype=data.dtype,
+                                compression=args.compress,
+                            )
+                            arf.set_attributes(
+                                tgt,
                                 datatype=args.datatype,
                                 offset=dset.offset,
-                                compression=args.compress,
                                 sampling_rate=info.pop("sampling_rate", None),
                                 **info
                             )
+                            chunksize = tgt.chunks[0]
+                            for i in range(0, data.size, chunksize):
+                                log.debug(" -- chunk %d", i)
+                                d = data[i:i + chunksize]
+                                tgt[i:i + d.size] = d
                     elif isinstance(dset, event_dset):
                         log.info("  - processing event dataset '%s'", dset.name)
                         arf.create_dataset(
