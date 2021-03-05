@@ -28,7 +28,6 @@ class dataset(object):
 
 class continuous_dset(dataset):
     """Represents a dataset from a continuous processor (i.e. sampled data)"""
-
     def __init__(self, base, structure):
         self.path = os.path.join(base, "continuous", structure["folder_name"])
         self.nchannels = structure.pop("num_channels")
@@ -45,37 +44,41 @@ class continuous_dset(dataset):
         timestamps = np.load(os.path.join(self.path, "timestamps.npy"), mmap_mode="r")
         self.offset = timestamps[0] / self.sampling_rate
 
+        self.dtype = np.dtype("int16")
         datfile = os.path.join(self.path, "continuous.dat")
-        data = np.memmap(datfile, dtype="int16", mode="r")
-        if data.size % self.nchannels != 0:
+        self.fp = open(datfile, "rb")
+        self.fp.seek(0, 2)
+        size = self.fp.tell() // self.dtype.itemsize
+        self.fp.seek(0, 0)
+        if size % self.nchannels != 0:
             raise IOError(
                 "size of file '%s' (%d) is not a multiple of the channel count (%d)"
-                % (datfile, data.size, self.nchannels)
+                % (datfile, size, self.nchannels)
             )
-        self.data = data.reshape((data.size // self.nchannels, self.nchannels))
+        self.nsamples = size // self.nchannels
         log.debug(
-            "- %s: array %s @ %.1f/s",
+            "- %s: array (%d, %d) @ %.1f/s",
             structure["folder_name"],
-            self.data.shape,
+            self.nsamples,
+            self.nchannels,
             self.sampling_rate,
         )
 
-    def channels(self):
-        """A generator that yields (data, metadata) for each of the channels in the dataset.
+    @property
+    def size(self):
+        return self.nsamples * self.nchannels
 
-        To save space, values are left in native datatype.
-        """
-        for index, info in enumerate(self.channel_attrs):
-            info = info.copy()
-            # index = info["recorded_processor_index"]
-            info.update(
-                {
-                    "sampling_rate": self.sampling_rate,
-                    "to_μV": info.pop("bit_volts"),
-                    "units": "",
-                }
-            )
-            yield (self.data[:, index], info)
+    def iter_chunks(self, samples):
+        """A generator that retrieves the dataset in chunks of nsamples x nchannels"""
+        offset = 0
+        while True:
+            buf = self.fp.read(samples * self.nchannels * self.dtype.itemsize)
+            if len(buf) == 0:
+                return
+            data = np.frombuffer(buf, dtype=self.dtype)
+            data.shape = (data.size // self.nchannels, self.nchannels)
+            yield offset, data
+            offset += data.shape[0]
 
 
 class spikes_dset(dataset):
@@ -115,6 +118,10 @@ class event_dset(dataset):
             self.data.shape,
             self.sampling_rate,
         )
+
+    @property
+    def size(self):
+        return self.data.size
 
 
 class recording(object):
@@ -165,6 +172,7 @@ def script(argv=None):
     import glob
     import re
     import datetime
+    from tqdm import tqdm
 
     p = argparse.ArgumentParser(
         prog="arfx-oephys",
@@ -188,6 +196,12 @@ def script(argv=None):
         "--dry-run",
         action="store_true",
         help="load data but do not write anything to disk",
+    )
+    p.add_argument(
+        "--progress",
+        "-p",
+        action="store_true",
+        help="show a progress bar",
     )
 
     p.add_argument("--skip-empty", action="store_true", help="skip empty datasets")
@@ -279,11 +293,13 @@ def script(argv=None):
                 log.info("- creating entry '%s'", rec_name)
 
                 for name, dset in rec.datasets.items():
-                    if args.skip_empty and dset.data.size == 0:
+                    if args.skip_empty and dset.size == 0:
                         log.info("  - skipping empty dataset '%s'", name)
                     elif isinstance(dset, continuous_dset):
                         log.info("  - processing continuous dataset '%s'", dset.name)
-                        for (data, info) in dset.channels():
+                        # first generate the datasets
+                        datasets = []
+                        for idx, info in enumerate(dset.channel_attrs):
                             if (
                                 cont_channels is not None
                                 and info["channel_name"] not in cont_channels
@@ -294,27 +310,34 @@ def script(argv=None):
                                 )
                                 continue
                             log.info(
-                                "     - storing channel '%s'", info["channel_name"]
+                                "     - creating dataset for channel '%s'", info["channel_name"]
                             )
                             # create an empty dataset and fill it in chunks
                             tgt = entry.create_dataset(
                                 name=info["channel_name"],
-                                shape=(data.size,),
-                                dtype=data.dtype,
+                                shape=(dset.nsamples,),
+                                dtype=dset.dtype,
                                 compression=args.compress,
+                                chunks=True
                             )
+                            chunksize = tgt.chunks[0]
                             arf.set_attributes(
                                 tgt,
                                 datatype=args.datatype,
                                 offset=dset.offset,
-                                sampling_rate=info.pop("sampling_rate", None),
+                                sampling_rate=dset.sampling_rate,
                                 **info
                             )
-                            chunksize = tgt.chunks[0]
-                            for i in range(0, data.size, chunksize):
-                                log.debug(" -- chunk %d", i)
-                                d = data[i:i + chunksize]
-                                tgt[i:i + d.size] = d
+                            datasets.append((idx, tgt))
+                        if len(datasets)==0:
+                            continue
+                        log.info("  - reading %d samples in chunks of %d", dset.nsamples, chunksize)
+                        expected = int(dset.nsamples / chunksize)
+                        for offset, chunk in tqdm(dset.iter_chunks(chunksize), total=expected, unit="chunk"):
+                            nsamples, _ = chunk.shape
+                            for i, tgt in datasets:
+                                tgt[offset:offset+nsamples] = chunk[:, i]
+
                     elif isinstance(dset, event_dset):
                         log.info("  - processing event dataset '%s'", dset.name)
                         arf.create_dataset(
@@ -326,3 +349,6 @@ def script(argv=None):
                             units=dset.units,
                             **dset.attrs
                         )
+
+if __name__=="__main__":
+    script()
