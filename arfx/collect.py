@@ -96,7 +96,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
     return entry_names, channel_props
 
 
-def iter_entry_chunks(entry, channels, predicate, size):
+def iter_entry_chunks(entry, channels, predicate):
     """ Iterate through the datasets in entry (that match predicate), yielding chunks """
     from tqdm import tqdm
 
