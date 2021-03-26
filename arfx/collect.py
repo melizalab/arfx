@@ -147,7 +147,6 @@ def collect_sampled_script(argv=None):
         "--channels",
         metavar="CHANNEL",
         nargs="+",
-        default=[],
         help="list of channels to unpack (default all)",
     )
     p.add_argument(
@@ -162,7 +161,16 @@ def collect_sampled_script(argv=None):
         metavar="ENTRY",
         nargs="+",
     )
-
+    p.add_argument(
+        "--start",
+        type=int,
+        help="if set, only collect data after this time point (in samples)",
+    )
+    p.add_argument(
+        "--stop",
+        type=int,
+        help="if set, only collect data before this time point (in samples)",
+    )
     p.add_argument(
         "--mountain-params",
         action="store_true",
@@ -177,6 +185,8 @@ def collect_sampled_script(argv=None):
 
     if args.channel_file is not None:
         with open(args.channel_file, "rt") as fp:
+            if args.channels is None:
+                args.channels = []
             for line in fp:
                 if line.startswith("#"):
                     continue
@@ -218,6 +228,7 @@ def collect_sampled_script(argv=None):
         if args.dry_run:
             log.info(" - dry run, ending script")
             return
+        sample_count = 0
         with io.open(
             args.outfile,
             mode="w",
@@ -230,4 +241,9 @@ def collect_sampled_script(argv=None):
                 for chunk in iter_entry_chunks(
                     entry, args.channels, arf.is_time_series
                 ):
-                    ofp.write(chunk.astype(dtype))
+                    if args.start is None or sample_count > args.start:
+                        ofp.write(chunk.astype(dtype))
+                    sample_count += chunk.shape[0]
+                    if args.stop is not None and sample_count > args.stop:
+                        log.info(" - stopping as requested after writing %d samples", sample_count - (args.start or 0))
+                        return
