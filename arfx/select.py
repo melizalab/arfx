@@ -103,14 +103,14 @@ def main(argv=None):
                         continue
                     else:
                         src_units = src_dset_attrs.pop("units", "")
+                        # this is to deal with jrecord-generated files that
+                        # violate spec on the units field
                         req = len(src_dset.dtype.names)
                         if isinstance(src_units, str) or len(src_units) != req:
-                            src_dset_attrs["units"] = [src_units] + [""] * (req - 1)
+                            src_dset_attrs["units"] = [src_units] + [b""] * (req - 1)
                 selected, offset = arf.select_interval(
                     src_dset, interval["begin"], interval["end"]
                 )
-                # this is to deal with jrecord-generated files that violate
-                # spec on the units field
                 arf.create_dataset(
                     tgt_entry,
                     name,
