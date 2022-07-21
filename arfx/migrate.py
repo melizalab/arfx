@@ -35,7 +35,7 @@ def unpickle_attrs(attrs, old_attrs=None):
     else:
         olda = {}
     for k, v in chain(attrs.iteritems(), olda.iteritems()):
-        if isinstance(v, basestring) and len(v) > 0 and v[-1] == ".":
+        if isinstance(v, str) and len(v) > 0 and v[-1] == ".":
             try:
                 val = loads(v)
             except:
@@ -83,7 +83,7 @@ def cvt_11(afp, **kwargs):
         if recuri is not None:
             entry.attrs["recuri"] = recuri
 
-        if not _catalogname in entry:
+        if _catalogname not in entry:
             log.warn("%s doesn't have a catalog: already upgraded?", entry.name)
             continue
         if not len(entry) > 1:
@@ -168,12 +168,9 @@ _pytables_attributes = dict(
 
 
 def cvt_11_20(afp, **kwargs):
-    """ convert a version 1.1 ARF file to version 2.0 """
-
+    """convert a version 1.1 ARF file to version 2.0"""
     pyt_attr_names = set(k for v in _pytables_attributes.values() for k in v.keys())
-
     sampling_rate = kwargs.get("sampling_rate", None)
-
     log.info("Upgrading %s to 2.0", afp.filename)
 
     for ename, entry in afp.items():
@@ -220,7 +217,7 @@ converters = [(StrictVersion("1.1"), cvt_11), (StrictVersion("2.0"), cvt_11_20)]
 
 
 def migrate_file(path, newname=None, **kwargs):
-    """ upgrade <path> to current version of ARF. If <newname> is not None, does this on a copy """
+    """upgrade <path> to current version of ARF. If <newname> is not None, does this on a copy"""
     from shutil import copy2
 
     if newname is not None:
