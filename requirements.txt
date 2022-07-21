@@ -1,8 +1,8 @@
-h5py==2.8.0; python_version < '3.8'
-h5py==2.10.0; python_version >= '3.8'
-arf==2.6.2
-ewave==1.0.5
-numpy==1.19.2
-natsort==7.0.1
-six==1.15.0
-tqdm==4.58.0
+h5py==3.1.0; python_version < '3.7'
+h5py==3.7.0; python_version >= '3.7'
+arf==2.6.4
+ewave==1.0.6
+h5py==3.7.0
+natsort==8.1.0
+numpy==1.23.1
+tqdm==4.64.0
