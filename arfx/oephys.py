@@ -7,7 +7,6 @@ https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+for
 
 """
 import os
-
 import numpy as np
 import logging
 import arf
@@ -28,6 +27,7 @@ class dataset(object):
 
 class continuous_dset(dataset):
     """Represents a dataset from a continuous processor (i.e. sampled data)"""
+
     def __init__(self, base, structure):
         self.path = os.path.join(base, "continuous", structure["folder_name"])
         self.nchannels = structure.pop("num_channels")
@@ -82,7 +82,7 @@ class continuous_dset(dataset):
 
 
 class spikes_dset(dataset):
-    """ Represents a dataset of spike times (not implemented) """
+    """Represents a dataset of spike times (not implemented)"""
 
     def __init__(self, base, structure):
         raise NotImplementedError("spikes datasets not yet supported")
@@ -310,7 +310,8 @@ def script(argv=None):
                                 )
                                 continue
                             log.info(
-                                "     - creating dataset for channel '%s'", info["channel_name"]
+                                "     - creating dataset for channel '%s'",
+                                info["channel_name"],
                             )
                             # create an empty dataset and fill it in chunks
                             tgt = entry.create_dataset(
@@ -318,7 +319,7 @@ def script(argv=None):
                                 shape=(dset.nsamples,),
                                 dtype=dset.dtype,
                                 compression=args.compress,
-                                chunks=True
+                                chunks=True,
                             )
                             chunksize = tgt.chunks[0]
                             arf.set_attributes(
@@ -329,14 +330,20 @@ def script(argv=None):
                                 **info
                             )
                             datasets.append((idx, tgt))
-                        if len(datasets)==0:
+                        if len(datasets) == 0:
                             continue
-                        log.info("  - reading %d samples in chunks of %d", dset.nsamples, chunksize)
+                        log.info(
+                            "  - reading %d samples in chunks of %d",
+                            dset.nsamples,
+                            chunksize,
+                        )
                         expected = int(dset.nsamples / chunksize)
-                        for offset, chunk in tqdm(dset.iter_chunks(chunksize), total=expected, unit="chunk"):
+                        for offset, chunk in tqdm(
+                            dset.iter_chunks(chunksize), total=expected, unit="chunk"
+                        ):
                             nsamples, _ = chunk.shape
                             for i, tgt in datasets:
-                                tgt[offset:offset+nsamples] = chunk[:, i]
+                                tgt[offset : offset + nsamples] = chunk[:, i]
 
                     elif isinstance(dset, event_dset):
                         log.info("  - processing event dataset '%s'", dset.name)
@@ -350,5 +357,6 @@ def script(argv=None):
                             **dset.attrs
                         )
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     script()

@@ -6,7 +6,6 @@ Read and write raw binary format files
 Copyright (C) 2012 Dan Meliza <dan // AT // meliza.org>
 Created 2012-03-29
 """
-import sys
 from ewave import rescale
 
 
@@ -65,12 +64,12 @@ class pcmfile:
 
     @property
     def filename(self):
-        """ The path of the file """
+        """The path of the file"""
         return self.fp.name
 
     @property
     def mode(self):
-        """ The mode for the file """
+        """The mode for the file"""
         return self.fp.mode.replace("b", "")
 
     @property
@@ -92,7 +91,7 @@ class pcmfile:
 
     @property
     def dtype(self):
-        """ Data storage type """
+        """Data storage type"""
         return self._dtype
 
     def __repr__(self):
@@ -111,7 +110,7 @@ class pcmfile:
         )
 
     def flush(self):
-        """ flush data to disk """
+        """flush data to disk"""
         if hasattr(self, "fp") and not self.fp.closed:
             self.fp.flush()
         return self

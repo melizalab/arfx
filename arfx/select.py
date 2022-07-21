@@ -11,10 +11,6 @@ Multiple segments can be specified as a line-delimited json stream
 
 Copyright (C) 2019 Dan Meliza <dan // AT // meliza.org>
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
-
 import sys
 import logging
 import json

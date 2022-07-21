@@ -22,19 +22,19 @@ def any_type(dset):
 
 
 def first(dict, fun):
-    """ For a nested dict, return the first value of fun(subdict) """
+    """For a nested dict, return the first value of fun(subdict)"""
     for v in dict.values():
         return fun(v)
 
 
 def all_items_equal(dict, fun):
-    """ For a nested dict, returns True iff all values of subdict[key] are equal """
+    """For a nested dict, returns True iff all values of subdict[key] are equal"""
     ss = set(fun(v) for v in dict.values())
     return len(ss) <= 1
 
 
 def channel_properties(entry, channels=None, predicate=any_type):
-    """ Returns a dict with channel names and required channel properties """
+    """Returns a dict with channel names and required channel properties"""
     return {
         name: {
             "sampling_rate": dset.attrs.get("sampling_rate", None),
@@ -97,7 +97,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 
 
 def iter_entry_chunks(entry, channels, predicate):
-    """ Iterate through the datasets in entry (that match predicate), yielding chunks """
+    """Iterate through the datasets in entry (that match predicate), yielding chunks"""
     from tqdm import tqdm
 
     props = channel_properties(entry, channels, predicate)
@@ -245,5 +245,8 @@ def collect_sampled_script(argv=None):
                         ofp.write(chunk.astype(dtype))
                     sample_count += chunk.shape[0]
                     if args.stop is not None and sample_count > args.stop:
-                        log.info(" - stopping as requested after writing %d samples", sample_count - (args.start or 0))
+                        log.info(
+                            " - stopping as requested after writing %d samples",
+                            sample_count - (args.start or 0),
+                        )
                         return

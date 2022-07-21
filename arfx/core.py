@@ -16,10 +16,6 @@ Scripts
 =====================
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
 import os
 import sys
 import argparse
@@ -34,7 +30,6 @@ from . import io, __version__
 default_extract_template = "{entry}_{channel}.wav"
 # template for created entries
 default_entry_template = "{base}_{index:04}"
-
 log = logging.getLogger("arfx")  # root logger
 
 
@@ -270,7 +265,7 @@ def add_entries(tgt, files, **options):
 
 
 def create_and_add_entries(tgt, files, **options):
-    """ Add data to a new file. If the file exists it's deleted """
+    """Add data to a new file. If the file exists it's deleted"""
     if os.path.exists(tgt):
         os.remove(tgt)
     add_entries(tgt, files, **options)
@@ -519,7 +514,7 @@ def read_toplevel_attribute(src, attrnames, **options):
 
 
 def repack_file(path, **options):
-    """ Call h5repack on a list of files to repack them """
+    """Call h5repack on a list of files to repack them"""
     from shutil import rmtree, copy
     from tempfile import mkdtemp
     from subprocess import call

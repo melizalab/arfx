@@ -7,10 +7,6 @@ on a plugin architecture.
 Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-09-19
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
-
 _entrypoint = "arfx.io"
 
 
@@ -36,7 +32,7 @@ def open(filename, *args, **kwargs):
 
 
 def list_plugins():
-    """ Returns a printable list of plugins registered to the arfx.io entry point """
+    """Returns a printable list of plugins registered to the arfx.io entry point"""
     from pkg_resources import iter_entry_points
 
     return "Supported file formats: " + " ".join(
@@ -45,7 +41,7 @@ def list_plugins():
 
 
 def is_appendable(shape1, shape2):
-    """ Returns true if two array shapes are the same except for the first dimension """
+    """Returns true if two array shapes are the same except for the first dimension"""
     from itertools import zip_longest
 
     return all(
@@ -56,7 +52,7 @@ def is_appendable(shape1, shape2):
 
 
 def extended_shape(shape1, shape2):
-    """ Returns the shape that results if two arrays are appended along the first dimension """
+    """Returns the shape that results if two arrays are appended along the first dimension"""
     from itertools import zip_longest
 
     for i, (a, b) in enumerate(zip_longest(shape1, shape2, fillvalue=1)):

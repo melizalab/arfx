@@ -4,9 +4,7 @@
 
 Implementation is based on https://numpy.org/devdocs/reference/generated/numpy.lib.format.html
 """
-import sys
-
-from .io import is_appendable, extended_shape
+from .io import extended_shape
 
 
 class npyfile:
@@ -84,7 +82,7 @@ class npyfile:
         import numpy.lib.format as npf
         import struct
 
-        ARRAY_ALIGN = 2 ** 16
+        ARRAY_ALIGN = 2**16
         version = (1, 0)
         fmt, encoding = npf._header_size_info[version]
         header = repr(self._write_descr).encode(encoding)

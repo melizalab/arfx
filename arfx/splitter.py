@@ -8,11 +8,6 @@ Currently, no effort is made to splice data across entries or files. This may
 result in some short entries. Also, only sampled datasets are processed.
 
 """
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import division
-from __future__ import unicode_literals
-
 import os
 import operator
 import itertools
@@ -25,7 +20,7 @@ log = logging.getLogger("arfx-split")  # root logger
 
 
 def entry_timestamps(arf_file):
-    """Iterate through entries in arf file, yielding a seq of (entry, timestamp) tuples """
+    """Iterate through entries in arf file, yielding a seq of (entry, timestamp) tuples"""
     for entry_name, entry in arf_file.items():
         if not isinstance(entry, h5.Group):
             continue

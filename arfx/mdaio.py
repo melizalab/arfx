@@ -6,10 +6,9 @@ Read and write mountainlab binary format files
 Copyright (C) 2020 Dan Meliza <dan // AT // meliza.org>
 
 """
-import sys
 import numpy as np
 
-from .io import is_appendable, extended_shape
+from .io import extended_shape
 
 NUM_DTYPE = {
     -2: "uint8",
