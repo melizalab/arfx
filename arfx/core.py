@@ -571,7 +571,9 @@ def setup_log(log, debug=False):
 
 
 def arfx():
-    p = argparse.ArgumentParser(description="copy data in and out of ARF files")
+    p = argparse.ArgumentParser(
+        description="copy data in and out of ARF files",
+    )
     p.add_argument("entries", nargs="*")
     p.add_argument("--version", action="version", version="%(prog)s " + __version__)
     p.add_argument("--arf-version", action="version", version=arf.version_info())
@@ -587,7 +589,6 @@ def arfx():
         action="version",
         version=io.list_plugins(),
     )
-
     # operations
     pp = p.add_argument_group("Operations")
     g = pp.add_mutually_exclusive_group(required=True)
@@ -666,7 +667,9 @@ def arfx():
     g.add_argument("-v", help="verbose output", action="store_true", dest="verbose")
     g.add_argument(
         "-n",
-        help="name entries or files using %(metavar)s",
+        help="name destination entries or files using python format strings. "
+        "Replacement fields include {entry}, {channel}, and {index} as well as any "
+        "attribute of the dataset or parent entry. Example: `{animal}_{index:04}.wav`",
         metavar="TEMPLATE",
         dest="template",
     )
