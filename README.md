@@ -1,7 +1,5 @@
 ## arfx
 
-[![Build Status](https://travis-ci.org/melizalab/arfx.png?branch=master)](https://travis-ci.org/melizalab/arfx)
-
 **arfx** is a family of commandline tools for copying sampled data in and out of ARF
 containers. ARF (<https://github.com/melizalab/arf>)
 is an open, portable file format for storing behavioral and neural data, based
