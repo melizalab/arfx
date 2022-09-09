@@ -6,4 +6,4 @@ operations involving single channel datasets, though it can also be used to copy
 entire entries between ARF files.
 """
 
-__version__ = "2.6.11"
+__version__ = "2.6.12"
