@@ -3,10 +3,6 @@
 import unittest
 from io import StringIO
 
-from distutils import version
-
-import os
-import numpy as np
 from arfx import lblio
 
 lbl_good = """\
