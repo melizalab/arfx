@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-import unittest
 from io import StringIO
-
+import pytest
 from arfx import lblio
 
 lbl_good = """\
@@ -36,31 +35,33 @@ lbl_events = ("A", "V", "C", "αγ")
 lbl_intervals = ("a", "b", "c", "d", "long-name")
 
 
-class TestLblIO(unittest.TestCase):
-    def setUp(self):
-        self.labels = lblio.read(StringIO(lbl_good))
+@pytest.fixture(scope="module")
+def labels():
+    return lblio.read(StringIO(lbl_good))
 
-    def test_event_count(self):
-        self.assertSequenceEqual(self.labels.shape, (11,))
 
-    def test_event_array_names(self):
-        self.assertSequenceEqual(self.labels.dtype.names, ("name", "start", "stop"))
+def test_event_count(labels):
+    assert labels.shape == (11,)
 
-    def test_event_names(self):
-        self.assertSetEqual(
-            set(self.labels["name"]),
-            set(lbl_events + lbl_intervals),
-        )
 
-    def test_events_and_intervals(self):
-        for event in self.labels:
-            if event["name"] in lbl_events:
-                self.assertEqual(event["start"], event["stop"])
-            else:
-                self.assertNotEqual(event["start"], event["stop"])
+def test_event_array_names(labels):
+    assert labels.dtype.names == ("name", "start", "stop")
 
-    def test_bad_header(self):
-        lbl_bad_header = """\
+
+def test_event_names(labels):
+    assert set(labels["name"]) == set(lbl_events + lbl_intervals)
+
+
+def test_events_and_intervals(labels):
+    for event in labels:
+        if event["name"] in lbl_events:
+            assert event["start"] == event["stop"]
+        else:
+            assert event["start"] != event["stop"]
+
+
+def test_bad_header():
+    lbl_bad_header = """\
         signal feasd
         type 0
         color 121
@@ -69,11 +70,12 @@ class TestLblIO(unittest.TestCase):
         #
            15.445851  121 A
         """
-        with self.assertRaises(ValueError):
-            _ = lblio.read(StringIO(lbl_bad_header))
+    with pytest.raises(ValueError):
+        _ = lblio.read(StringIO(lbl_bad_header))
 
-    def test_missing_interval_opener(self):
-        lbl = """\
+
+def test_missing_interval_opener():
+    lbl = """\
         signal feasd
         type 0
         color 121
@@ -86,11 +88,12 @@ class TestLblIO(unittest.TestCase):
            15.747526  121 a-0
            17.010093  121 C
         """
-        with self.assertRaises(ValueError):
-            _ = lblio.read(StringIO(lbl))
+    with pytest.raises(ValueError):
+        _ = lblio.read(StringIO(lbl))
 
-    def test_missing_interval_close(self):
-        lbl = """\
+
+def test_missing_interval_close():
+    lbl = """\
         signal feasd
         type 0
         color 121
@@ -103,5 +106,5 @@ class TestLblIO(unittest.TestCase):
            15.747526  121 a-0
            17.010093  121 C
         """
-        with self.assertRaises(ValueError):
-            _ = lblio.read(StringIO(lbl))
+    with pytest.raises(ValueError):
+        _ = lblio.read(StringIO(lbl))
