@@ -6,6 +6,11 @@ Implementation is based on https://numpy.org/devdocs/reference/generated/numpy.l
 """
 from .io import extended_shape
 
+# appending depends on writing a large header to the file so that it can be
+# safely updated. Later versions of numpy will not load large-header files
+# unless the maximum header size is explicitly set.
+ARRAY_ALIGN = 2**16
+
 
 class npyfile:
     """Provides access to sampled data in numpy format
@@ -35,7 +40,7 @@ class npyfile:
         if mode == "w":
             self.fp = open(file, mode=mode + "b")
         elif mode == "r":
-            self.data = load(file, mmap_mode="r")
+            self.data = load(file, mmap_mode="r", max_header_size=ARRAY_ALIGN)
         else:
             raise ValueError("Invalid mode (use 'r' or 'w')")
 
@@ -52,7 +57,13 @@ class npyfile:
         return self.data
 
     def write(self, data):
-        from numpy import isfortran, save
+        """Write data to the file. If the file is empty, data can be any
+        c-contiguous array. If the file is not empty, this method will attempt
+        to append the data to the file, provided the shape and dtype are
+        compatible with the previously written data.
+
+        """
+        from numpy import isfortran
         from numpy.lib.format import header_data_from_array_1_0
 
         if isfortran(data):
@@ -65,6 +76,7 @@ class npyfile:
             self._write_header()
             self.fp.write(memoryview(data).cast("B"))
         else:
+            # append data
             if self._write_descr["descr"] != header_data_from_array_1_0(data)["descr"]:
                 raise ValueError(
                     "data type is not compatible with previously written data"
@@ -82,7 +94,6 @@ class npyfile:
         import numpy.lib.format as npf
         import struct
 
-        ARRAY_ALIGN = 2**16
         version = (1, 0)
         fmt, encoding = npf._header_size_info[version]
         header = repr(self._write_descr).encode(encoding)
