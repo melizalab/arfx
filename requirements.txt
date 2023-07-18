@@ -2,5 +2,5 @@ arf==2.6.4
 ewave==1.0.7
 h5py==3.9.0
 natsort==8.4.0
-numpy==1.25.0
+numpy==1.24.4
 tqdm==4.65.0
