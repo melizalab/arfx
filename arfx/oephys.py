@@ -10,6 +10,7 @@ import os
 import numpy as np
 import logging
 import arf
+import re
 
 from arfx import core
 
@@ -41,9 +42,30 @@ class continuous_dset(dataset):
             )
         super().__init__(base, structure)
 
-        timestamps = np.load(os.path.join(self.path, "timestamps.npy"), mmap_mode="r")
-        self.offset = timestamps[0] / self.sampling_rate
+        # the timestamps.npy file can get deleted during spike sorting, so we
+        # fall back on the sync_messages.txt file
+        try:
+            timestamps = np.load(
+                os.path.join(self.path, "timestamps.npy"), mmap_mode="r"
+            )
+            sample_offset = timestamps[0]
+        except FileNotFoundError:
+            log.warn(
+                "- warning: timestamps.npy file is missing for %s; falling back on sync_messages.txt",
+                self.name,
+            )
+            processor, idx, subidx = (
+                structure["source_processor_name"],
+                structure["source_processor_id"],
+                structure["source_processor_sub_idx"],
+            )
+            sample_offset = find_sync_time(base, processor, idx, subidx)
+            if sample_offset is None:
+                raise RuntimeError(
+                    "unable to determine sync time for %s dataset" % self.name
+                )
 
+        self.offset = sample_offset / self.sampling_rate
         self.dtype = np.dtype("int16")
         datfile = os.path.join(self.path, "continuous.dat")
         self.fp = open(datfile, "rb")
@@ -57,11 +79,12 @@ class continuous_dset(dataset):
             )
         self.nsamples = size // self.nchannels
         log.debug(
-            "- %s: array (%d, %d) @ %.1f/s",
+            "- %s: array (%d, %d) @ %.1f/s; offset=%.3f s",
             structure["folder_name"],
             self.nsamples,
             self.nchannels,
             self.sampling_rate,
+            self.offset,
         )
 
     @property
@@ -165,6 +188,25 @@ class recording(object):
             else:
                 self.datasets[dset.name] = dset
         self.attrs.update(structure)
+
+
+def find_sync_time(path, processor, id, subid):
+    """Look up the start time for a processor using the sync_messages.txt file. Returns None if there is no match"""
+
+    rx = re.compile(
+        r"Processor: (?P<processor>.+?) Id: (?P<id>\d+?) subProcessor: (?P<subid>\d+?) start time: (?P<start>\d+)"
+    )
+    with open(os.path.join(path, "sync_messages.txt"), "r") as fp:
+        for line in fp:
+            match = rx.match(line)
+            if match is None:
+                continue
+            if (
+                match.group("processor") == processor
+                and int(match.group("id")) == int(id)
+                and int(match.group("subid")) == int(subid)
+            ):
+                return int(match.group("start"))
 
 
 def script(argv=None):
