@@ -8,18 +8,23 @@ Currently, no effort is made to splice data across entries or files. This may
 result in some short entries. Also, only sampled datasets are processed.
 
 """
-import os
+from typing import Iterator, Sequence, Tuple
+from pathlib import Path
 import operator
 import itertools
 import logging
 import datetime
+
 import arf
+import numpy as np
 import h5py as h5
 
 log = logging.getLogger("arfx-split")  # root logger
 
 
-def entry_timestamps(arf_file):
+def entry_timestamps(
+    arf_file: h5.Group,
+) -> Iterator[Tuple[h5.Group, datetime.datetime]]:
     """Iterate through entries in arf file, yielding a seq of (entry, timestamp) tuples"""
     for entry_name, entry in arf_file.items():
         if not isinstance(entry, h5.Group):
@@ -28,8 +33,8 @@ def entry_timestamps(arf_file):
         yield (entry, entry_time)
 
 
-def entry_duration(entry):
-    """Determines the entry duration by finding the longest (sampled) dataset"""
+def entry_duration(entry: h5.Group) -> float:
+    """Determines the entry duration (in s) by finding the longest (sampled) dataset"""
     max_dur = 0
     for dset in entry.values():
         if not arf.is_time_series(dset):
@@ -40,13 +45,12 @@ def entry_duration(entry):
     return max_dur
 
 
-def merge_jill_logs(files):
-    """Merge all the 'jill_log' datasets in files"""
-    from numpy import concatenate
+def merge_jill_logs(files: Sequence[h5.Group]) -> np.ndarray:
+    """Merge all the 'jill_log' datasets in files into a single structured record array"""
 
     out = [fp["jill_log"] for fp in files if "jill_log" in fp]
     if len(out) > 0:
-        arr = concatenate(out)
+        arr = np.concatenate(out)
         arr.sort(order=("sec", "usec"))
         return arr
 
@@ -86,8 +90,8 @@ def main(argv=None):
         "is to overwrite). Note that log files are NOT merged in this mode",
         action="store_true",
     )
-    p.add_argument("src", help="the ARF files to chunk up", nargs="+")
-    p.add_argument("tgt", help="the destination ARF file")
+    p.add_argument("src", type=Path, help="the ARF files to chunk up", nargs="+")
+    p.add_argument("tgt", type=Path, help="the destination ARF file")
 
     args = p.parse_args(argv)
     setup_log(log, args.verbose)
@@ -104,12 +108,13 @@ def main(argv=None):
         for entry, timestamp in entries:
             log.debug(
                 "  %s%s (time=%s)",
-                os.path.basename(entry.file.filename),
+                Path(entry.file.filename).name,
                 entry.name,
                 timestamp,
             )
 
     # open output file
+    tgt_entry_index = 0
     if not args.dry_run:
         if args.append:
             tgt_file = arf.open_file(args.tgt, mode="a")
@@ -125,18 +130,15 @@ def main(argv=None):
                     "jill_log", data=jilllog, compression=args.compress
                 )
                 log.info("merged jill_log datasets")
-            tgt_entry_index = 0
 
     # iterate through source entries, then chunk up datasets
     for entry, timestamp in entries:
-        log.info(
-            "source entry: %s%s", os.path.basename(entry.file.filename), entry.name
-        )
+        log.info("source entry: %s%s", Path(entry.file.filename).name, entry.name)
         max_duration = entry_duration(entry)
         n_chunks = int(max_duration // args.duration) + 1
         log.debug("  max duration: %3.2f s (chunks=%d)", max_duration, n_chunks)
         for i in range(n_chunks):
-            tgt_entry_name = "entry_%05d" % tgt_entry_index
+            tgt_entry_name = f"entry_{tgt_entry_index:05}"
             tgt_timestamp = timestamp + datetime.timedelta(seconds=args.duration) * i
             # create target entry
             log.info("  target entry: %s (time=%s)", tgt_entry_name, tgt_timestamp)
@@ -150,8 +152,8 @@ def main(argv=None):
                     elif k == "uuid":
                         k = "origin-uuid"
                     tgt_entry.attrs[k] = v
-                tgt_entry.attrs["origin-file"] = os.path.basename(entry.file.filename)
-                tgt_entry.attrs["origin-entry"] = os.path.basename(entry.name)
+                tgt_entry.attrs["origin-file"] = Path(entry.file.filename).name
+                tgt_entry.attrs["origin-entry"] = Path(entry.name).name
             for dset_name, dset in entry.items():
                 if not arf.is_time_series(dset):
                     log.debug("    %s: (not sampled)", dset_name)
@@ -173,5 +175,5 @@ def main(argv=None):
                         dset_name,
                         data,
                         compression=args.compress,
-                        **tgt_attrs
+                        **tgt_attrs,
                     )
