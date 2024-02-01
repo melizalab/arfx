@@ -128,8 +128,8 @@ class pcmfile:
                   corresponds to copy-on-write; use 'r+' to write changes to disk. Be
                   warned that 'w' modes may corrupt data.
         """
-        from numpy import memmap as mmap
         from numpy import fromfile
+        from numpy import memmap as mmap
 
         if self.mode == "w":
             raise IOError("file is write-only")

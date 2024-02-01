@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-import pytest
-import os
+
 import numpy as np
+import pytest
+
 from arfx import mdaio
 
 

@@ -51,7 +51,7 @@ def read(fp):
     from numpy import array
 
     # read and discard header
-    for i in range(7):
+    for _i in range(7):
         line = fp.readline()
         if len(line) == 0:
             raise ValueError("Invalid lbl file - header has empty lines")
@@ -63,7 +63,7 @@ def read(fp):
         try:
             time = float(time)
         except ValueError as e:
-            raise ValueError(f"Parse error in line {i + 8}: {e}")
+            raise ValueError(f"Parse error in line {i + 8}: {e}") from e
         if label.endswith("-0"):
             base = label[:-2]
             if base in unmatched:
@@ -77,11 +77,11 @@ def read(fp):
             try:
                 start_time = unmatched.pop(base)
                 labels.append((base, start_time, time))
-            except KeyError:
+            except KeyError as err:
                 raise ValueError(
                     f"Parse error in line {i + 8}: closing interval "
                     f"for {base} but no opening"
-                )
+                ) from err
         else:
             labels.append((label, time, time))
     maxlen = max(len(lbl[0]) for lbl in labels)

@@ -8,16 +8,16 @@ Currently, no effort is made to splice data across entries or files. This may
 result in some short entries. Also, only sampled datasets are processed.
 
 """
-from typing import Iterator, Sequence, Tuple
-from pathlib import Path
-import operator
+import datetime
 import itertools
 import logging
-import datetime
+import operator
+from pathlib import Path
+from typing import Iterator, Sequence, Tuple
 
 import arf
-import numpy as np
 import h5py as h5
+import numpy as np
 
 log = logging.getLogger("arfx-split")  # root logger
 
@@ -26,7 +26,7 @@ def entry_timestamps(
     arf_file: h5.Group,
 ) -> Iterator[Tuple[h5.Group, datetime.datetime]]:
     """Iterate through entries in arf file, yielding a seq of (entry, timestamp) tuples"""
-    for entry_name, entry in arf_file.items():
+    for _entry_name, entry in arf_file.items():
         if not isinstance(entry, h5.Group):
             continue
         entry_time = arf.timestamp_to_datetime(entry.attrs["timestamp"])
@@ -57,6 +57,7 @@ def merge_jill_logs(files: Sequence[h5.Group]) -> np.ndarray:
 
 def main(argv=None):
     import argparse
+
     from .core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-split", description=__doc__)

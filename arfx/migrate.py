@@ -7,13 +7,13 @@ Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-04-06
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import unicode_literals
-import h5py as hp
+from __future__ import absolute_import, division, unicode_literals
+
 import logging
-import arf
 from distutils.version import StrictVersion
+
+import arf
+import h5py as hp
 
 from . import h5vlen
 
@@ -28,7 +28,8 @@ def unpickle_attrs(attrs, old_attrs=None):
     this mapping to attrs, unpickling as needed.
     """
     from itertools import chain
-    from cPickle import loads
+
+    from pickle import loads, UnpicklingError
 
     if old_attrs is not None:
         olda = dict((k, v) for k, v in old_attrs.iteritems() if k not in attrs)
@@ -38,13 +39,13 @@ def unpickle_attrs(attrs, old_attrs=None):
         if isinstance(v, str) and len(v) > 0 and v[-1] == ".":
             try:
                 val = loads(v)
-            except:
+            except UnpicklingError:
                 log.error("error unpickling attribute %s (%s)", k, v)
                 continue
 
             try:
                 attrs[k] = val
-            except:
+            except UnpicklingError:
                 log.error("error storing pickled attribute %s", k, v)
                 attrs[k] = v
 
@@ -84,10 +85,10 @@ def cvt_11(afp, **kwargs):
             entry.attrs["recuri"] = recuri
 
         if _catalogname not in entry:
-            log.warn("%s doesn't have a catalog: already upgraded?", entry.name)
+            log.warning("%s doesn't have a catalog: already upgraded?", entry.name)
             continue
         if not len(entry) > 1:
-            log.warn("%s appears to be empty", entry.name)
+            log.warning("%s appears to be empty", entry.name)
             del entry[_catalogname]
             continue
         ccat = entry[_catalogname][::]
@@ -102,12 +103,10 @@ def cvt_11(afp, **kwargs):
             old_nodes.add(new_name)
         # then iterate through channels
         for rr in ccat:
-            node_name = ("node" in ccat.dtype.names) and rr["node"] or rr["table"]
+            node_name = (("node" in ccat.dtype.names) and rr["node"]) or rr["table"]
             datatype = (
-                ("datatype" in ccat.dtype.names)
-                and rr["datatype"]
-                or arf.DataTypes.UNDEFINED
-            )
+                ("datatype" in ccat.dtype.names) and rr["datatype"]
+            ) or arf.DataTypes.UNDEFINED
             old_dset = entry["_arfmigrate_" + node_name]
             dtype, stype, ncol = arf.dataset_properties(old_dset)
             if dtype == "event" and stype == "vlarray":
@@ -239,6 +238,7 @@ def migrate_file(path, newname=None, **kwargs):
 
 def migrate_script(argv=None):
     import argparse
+
     from .core import __version__, repack_file, setup_log
 
     p = argparse.ArgumentParser(

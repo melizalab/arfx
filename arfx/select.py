@@ -11,9 +11,10 @@ Multiple segments can be specified as a line-delimited json stream
 
 Copyright (C) 2019 Dan Meliza <dan // AT // meliza.org>
 """
-import sys
-import logging
 import json
+import logging
+import sys
+
 import arf
 
 log = logging.getLogger("arfx-collect")
@@ -21,6 +22,7 @@ log = logging.getLogger("arfx-collect")
 
 def main(argv=None):
     import argparse
+
     from arfx.core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-select", description=__doc__)

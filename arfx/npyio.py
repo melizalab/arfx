@@ -91,8 +91,9 @@ class npyfile:
     def _write_header(self):
         """Write a well-padded header to the file"""
         # this is a reimplemntation of npf._wrap_header that pads the header to maximum
-        import numpy.lib.format as npf
         import struct
+
+        import numpy.lib.format as npf
 
         version = (1, 0)
         fmt, encoding = npf._header_size_info[version]
@@ -103,9 +104,9 @@ class npyfile:
         )
         try:
             header_prefix = npf.magic(*version) + struct.pack(fmt, hlen + padlen)
-        except struct.error:
+        except struct.error as err:
             msg = "Header length {} too big for version={}".format(hlen, version)
-            raise ValueError(msg)
+            raise ValueError(msg) from err
         self.fp.seek(0)
         self.fp.write(header_prefix)
         self.fp.write(header)

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
 from io import StringIO
+
 import pytest
+
 from arfx import lblio
 
 lbl_good = """\
@@ -30,8 +32,8 @@ nfields 1
    19.012345  121 αγ
    20.123183  121 long-name-0
    20.353885  121 long-name-1
-"""
-lbl_events = ("A", "V", "C", "αγ")
+"""  # noqa: RUF001
+lbl_events = ("A", "V", "C", "αγ")  # noqa: RUF001
 lbl_intervals = ("a", "b", "c", "d", "long-name")
 
 

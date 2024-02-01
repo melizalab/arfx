@@ -5,14 +5,15 @@ Specialized script to collect data across channels and entries
 
 Copyright (C) 2018 Dan Meliza <dan // AT // meliza.org>
 """
-import os
-import operator
-import numpy as np
 import logging
-import arf
+import operator
+import os
 
-from .core import __version__, setup_log
+import arf
+import numpy as np
+
 from . import io
+from .core import __version__, setup_log
 
 log = logging.getLogger("arfx-collect")
 
@@ -117,8 +118,9 @@ def iter_entry_chunks(entry, channels, predicate):
 
 
 def collect_sampled_script(argv=None):
-    from natsort import natsorted
     import argparse
+
+    from natsort import natsorted
 
     p = argparse.ArgumentParser(
         prog="arfx-collect-sampled",
@@ -200,9 +202,9 @@ def collect_sampled_script(argv=None):
             arfp, args.entries, args.channels, predicate=arf.is_time_series
         )
         if not all_items_equal(channel_props, operator.itemgetter("sampling_rate")):
-            log.warn(" - warning: not all datasets have the same sampling rate")
+            log.warning(" - warning: not all datasets have the same sampling rate")
         if not all_items_equal(channel_props, operator.itemgetter("units")):
-            log.warn(" - warning: not all datasets have the same units")
+            log.warning(" - warning: not all datasets have the same units")
         nentries = len(entry_names)
         nchannels = sum(channel_props[c]["channels"] for c in channel_props)
         sampling_rate = first(channel_props, operator.itemgetter("sampling_rate"))

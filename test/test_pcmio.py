@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-import pytest
 import numpy as np
+import pytest
+
 from arfx import pcmio
 
 

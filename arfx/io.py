@@ -19,8 +19,9 @@ def open(filename, *args, **kwargs):
     arguments are passed to the initializer for the handler
 
     """
-    from pkg_resources import iter_entry_points
     from os.path import splitext
+
+    from pkg_resources import iter_entry_points
 
     ext = splitext(filename)[1].lower()
     cls = None

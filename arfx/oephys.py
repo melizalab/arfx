@@ -6,11 +6,12 @@ This interface is based on the (2020-09-29) specification at
 https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+format
 
 """
-import os
-import numpy as np
 import logging
-import arf
+import os
 import re
+
+import arf
+import numpy as np
 
 from arfx import core
 
@@ -35,7 +36,7 @@ class continuous_dset(dataset):
         self.channel_attrs = structure.pop("channels")
         self.sampling_rate = structure.pop("sample_rate")
         if len(self.channel_attrs) != self.nchannels:
-            log.warn(
+            log.warning(
                 "warning: channel metadata count (%d) and data channel count (%d) don't match",
                 len(self.channel_attrs),
                 self.nchannels,
@@ -49,8 +50,8 @@ class continuous_dset(dataset):
                 os.path.join(self.path, "timestamps.npy"), mmap_mode="r"
             )
             sample_offset = timestamps[0]
-        except FileNotFoundError:
-            log.warn(
+        except FileNotFoundError as err:
+            log.warning(
                 "- warning: timestamps.npy file is missing for %s; falling back on sync_messages.txt",
                 self.name,
             )
@@ -63,7 +64,7 @@ class continuous_dset(dataset):
             if sample_offset is None:
                 raise RuntimeError(
                     "unable to determine sync time for %s dataset" % self.name
-                )
+                ) from err
 
         self.offset = sample_offset / self.sampling_rate
         self.dtype = np.dtype("int16")
@@ -170,21 +171,21 @@ class recording(object):
             try:
                 dset = continuous_dset(path, processor)
             except NotImplementedError as e:
-                log.warn("- %s skipped: %s", processor["folder_name"], e)
+                log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
                 self.datasets[dset.name] = dset
         for processor in structure.pop("spikes", ()):
             try:
                 dset = spikes_dset(path, processor)
             except NotImplementedError as e:
-                log.warn("- %s skipped: %s", processor["folder_name"], e)
+                log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
                 self.datasets[dset.name] = dset
         for processor in structure.pop("events", ()):
             try:
                 dset = event_dset(path, processor)
             except NotImplementedError as e:
-                log.warn("- %s skipped: %s", processor["folder_name"], e)
+                log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
                 self.datasets[dset.name] = dset
         self.attrs.update(structure)
@@ -211,9 +212,10 @@ def find_sync_time(path, processor, id, subid):
 
 def script(argv=None):
     import argparse
+    import datetime
     import glob
     import re
-    import datetime
+
     from tqdm import tqdm
 
     p = argparse.ArgumentParser(

@@ -16,15 +16,15 @@ Scripts
 =====================
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
-import os
-import sys
 import argparse
 import logging
+import os
+import sys
 
-import h5py as h5
 import arf
-from . import io, __version__
+import h5py as h5
 
+from . import __version__, io
 
 # template for extracted files
 default_extract_template = "{entry}_{channel}.wav"
@@ -103,7 +103,7 @@ def dataset_properties(dset):
         return contents, "table", ncol
 
     dtt = dset.attrs.get("datatype", 0)
-    ncols = len(dset.shape) < 2 and 1 or dset.shape[1]
+    ncols = (len(dset.shape) < 2 and 1) or dset.shape[1]
     if dtt < arf.DataTypes.EVENT:
         # assume UNKNOWN is sampled
         return "sampled", "array", ncols
@@ -131,9 +131,10 @@ def parse_name_template(node, template, index=0, default="NA"):
     index - value to insert for {index} key (usually the index of the entry in the file)
     default - value to replace missing keys with
     """
-    from h5py import Group, Dataset
     import posixpath as pp
     from string import Formatter
+
+    from h5py import Dataset, Group
 
     f = Formatter()
     values = dict()
@@ -145,7 +146,7 @@ def parse_name_template(node, template, index=0, default="NA"):
         entry = dset.parent
 
     try:
-        for lt, field, fs, c in f.parse(template):
+        for _lt, field, _fs, _c in f.parse(template):
             if field is None:
                 continue
             elif field == "entry":
@@ -173,7 +174,7 @@ def parse_name_template(node, template, index=0, default="NA"):
         else:
             return template  # no substitutions were made
     except ValueError as e:
-        raise ValueError("template error: " + e.message)
+        raise ValueError("template error: " + e.message) from e
 
 
 def iter_entries(src, cbase="pcm"):
@@ -292,7 +293,7 @@ def extract_entries(src, entries, channels=None, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            log.warn("warning: %s", e)
+            log.warning("warning: %s", e)
         for index, ename in enumerate(arf.keys_by_creation(arfp)):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
@@ -311,7 +312,7 @@ def extract_entries(src, entries, channels=None, **options):
                     fname = parse_name_template(
                         dset, ebase or default_extract_template, index=index
                     )
-                    dtype, stype, ncols = dataset_properties(dset)
+                    dtype, _stype, _ncols = dataset_properties(dset)
                     if dtype != "sampled":
                         log.debug("%s -> skipped (no supported containers)", dset.name)
                         continue
@@ -360,9 +361,11 @@ def copy_entries(tgt, files, **options):
 
     entry_base: if specified, rename entries sequentially in target file
     """
-    from .tools import memoized
     import posixpath as pp
+
     from h5py import Group
+
+    from .tools import memoized
 
     ebase = options.get("template", None)
     acache = memoized(arf.open_file)
@@ -413,7 +416,7 @@ def list_entries(src, entries, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            log.warn("warning: %s", e)
+            log.warning("warning: %s", e)
         if entries is None or len(entries) == 0:
             try:
                 it = arf.keys_by_creation(arfp)
@@ -461,7 +464,7 @@ def update_entries(src, entries, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            log.warn("warning: %s", e)
+            log.warning("warning: %s", e)
         for i, entry in enumerate(arfp):
             if entries is None or len(entries) == 0 or pp.relpath(entry) in entries:
                 enode = arfp[entry]
@@ -485,7 +488,7 @@ def write_toplevel_attribute(tgt, files, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            log.warn("warning: %s", e)
+            log.warning("warning: %s", e)
         for fname in files:
             attrname = "user_%s" % os.path.basename(fname)
             print("%s -> %s/%s" % (fname, tgt, attrname))
@@ -503,7 +506,7 @@ def read_toplevel_attribute(src, attrnames, **options):
         try:
             arf.check_file_version(arfp)
         except Warning as e:
-            log.warn("warning: %s", e)
+            log.warning("warning: %s", e)
         for attrname in attrnames:
             aname = "user_%s" % attrname
             if aname in arfp.attrs:
@@ -515,9 +518,9 @@ def read_toplevel_attribute(src, attrnames, **options):
 
 def repack_file(path, **options):
     """Call h5repack on a list of files to repack them"""
-    from shutil import rmtree, copy
-    from tempfile import mkdtemp
+    from shutil import copy, rmtree
     from subprocess import call
+    from tempfile import mkdtemp
 
     cmd = ["/usr/bin/env", "h5repack"]
     compress = options.get("compress", False)
@@ -526,7 +529,7 @@ def repack_file(path, **options):
     try:
         tdir = mkdtemp()
         log.info("Repacking %s", path)
-        fdir, fbase = os.path.split(path)
+        _fdir, fbase = os.path.split(path)
         retcode = call(cmd + [path, os.path.join(tdir, fbase)])
         if retcode == 0:
             copy(os.path.join(tdir, fbase), path)

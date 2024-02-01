@@ -68,8 +68,8 @@ class mdafile:
         dt_code, itemsize, ndims = struct.unpack(b"<lll", self.fp.read(12))
         try:
             self.dtype = np.dtype(NUM_DTYPE[dt_code])
-        except KeyError:
-            raise ValueError("invalid data type code in header")
+        except KeyError as err:
+            raise ValueError("invalid data type code in header") from err
         assert (
             self.dtype.itemsize == itemsize
         ), "item size does not match header data type"
@@ -114,12 +114,12 @@ class mdafile:
                   corresponds to copy-on-write; use 'r+' to write changes to disk. Be
                   warned that 'w' modes may corrupt data.
         """
-        from numpy import memmap as mmap
         from numpy import fromfile
+        from numpy import memmap as mmap
 
         if self.mode != "r":
             raise IOError("attempted to read from a file opened in write mode")
-        header = self._read_header()
+        _header = self._read_header()
         if frames is None:
             frames = self.nframes - offset
         offset = self.fp.tell() + offset * self.dtype.itemsize

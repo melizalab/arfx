@@ -2,6 +2,7 @@
 # -*- mode: python -*-
 import numpy as np
 import pytest
+
 from arfx import npyio
 
 
