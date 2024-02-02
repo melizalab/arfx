@@ -52,7 +52,17 @@ def merge_jill_logs(files: Sequence[h5.Group]) -> np.ndarray:
     if len(out) > 0:
         arr = np.concatenate(out)
         arr.sort(order=("sec", "usec"))
-        return arr
+        return pad_log_messages(arr)
+
+
+def pad_log_messages(dset: np.ndarray) -> np.ndarray:
+    """Turn variable-length messages into fixed-length so h5py will store them"""
+    if "message" not in dset.dtype.fields:
+        raise ValueError("input must be a structured array with a 'message' field")
+    min_length = max(len(s) for s in dset["message"])
+    new_dtype = [(k, v) for k, (v, _) in dset.dtype.fields.items() if k != "message"]
+    new_dtype.append(("message", h5.string_dtype(length=min_length)))
+    return dset.astype(np.dtype(new_dtype))
 
 
 def main(argv=None):
@@ -163,8 +173,8 @@ def main(argv=None):
                 chunk_size = int(args.duration * sampling_rate)
                 start = chunk_size * i
                 stop = min(start + chunk_size, dset.shape[0])
-                data = dset[start:stop]
                 log.debug("    %s: [%d:%d]", dset_name, start, stop)
+                # data = dset[start:stop]
                 if not args.dry_run:
                     tgt_attrs = dict(dset.attrs)
                     try:
@@ -174,7 +184,7 @@ def main(argv=None):
                     arf.create_dataset(
                         tgt_entry,
                         dset_name,
-                        data,
+                        dset[start:stop],
                         compression=args.compress,
                         **tgt_attrs,
                     )
