@@ -1,18 +1,13 @@
 name: Build wheels
 
-# on: [push, pull_request]
-# Alternatively, to publish when a (published) GitHub Release is created, use the following:
-on:
-  release:
-    types:
-      - published
+on: [push, pull_request]
 
 jobs:
   build:
     name: Build source and wheels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build wheels
         run: pipx run build
       - uses: actions/upload-artifact@v3
@@ -23,9 +18,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     # upload to PyPI on every tag starting with 'v'
-    #if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     # alternatively, to publish when a GitHub Release is created, use the following rule:
-    if: github.event_name == 'release' && github.event.action == 'published'
+    # if: github.event_name == 'release' && github.event.action == 'published'
     steps:
       - uses: actions/download-artifact@v3
         with:

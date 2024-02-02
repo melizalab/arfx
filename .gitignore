@@ -7,3 +7,4 @@
 *.arf
 *.wav
 /examples/
+.DS_Store
