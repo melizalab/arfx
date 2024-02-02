@@ -9,8 +9,8 @@ arfx
 .. |Version| image:: https://img.shields.io/pypi/v/arfx.svg
 .. _Version: https://pypi.python.org/pypi/arfx/
 
-.. |BuildStatus| image:: https://github.com/melizalab/arfx/actions/workflows/python_tests.yml/badge.svg
-.. _BuildStatus: https://github.com/melizalab/arfx/actions/workflows/python_tests.yml
+.. |BuildStatus| image:: https://github.com/melizalab/arfx/actions/workflows/python-package.yml/badge.svg
+.. _BuildStatus: https://github.com/melizalab/arfx/actions/workflows/python-package.yml
 
 .. |License| image:: https://img.shields.io/pypi/l/arfx.svg
 .. _License: https://opensource.org/license/bsd-3-clause/
