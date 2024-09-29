@@ -151,11 +151,11 @@ def parse_name_template(node, template, index=0, default="NA"):
                 continue
             elif field == "entry":
                 if not entry:
-                    raise ValueError("can't resolve {entry} field for %s" % node)
+                    raise ValueError(f"can't resolve `entry` field for {node}")
                 values[field] = pp.basename(entry.name)
             elif field == "channel":
                 if not dset:
-                    raise ValueError("can't resolve {channel} field for %s" % node)
+                    raise ValueError(f"can't resolve `channel` field for {node}")
                 values[field] = pp.basename(dset.name)
             elif field == "index":
                 values[field] = index
@@ -174,7 +174,7 @@ def parse_name_template(node, template, index=0, default="NA"):
         else:
             return template  # no substitutions were made
     except ValueError as e:
-        raise ValueError("template error: " + e.message) from e
+        raise ValueError(f"template error: {e.message}") from e
 
 
 def iter_entries(src, cbase="pcm"):
@@ -250,7 +250,7 @@ def add_entries(tgt, files, **options):
                     entry_name,
                     timestamp,
                     entry_creator="org.meliza.arfx/arfx " + __version__,
-                    **metadata
+                    **metadata,
                 )
                 arf.create_dataset(
                     entry,
@@ -307,7 +307,7 @@ def extract_entries(src, entries, channels=None, **options):
                     attrs.update(
                         nchannels=dset.shape[1] if len(dset.shape) > 1 else 1,
                         dtype=dset.dtype,
-                        **dset.attrs
+                        **dset.attrs,
                     )
                     fname = parse_name_template(
                         dset, ebase or default_extract_template, index=index
@@ -465,7 +465,7 @@ def update_entries(src, entries, **options):
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
-        for i, entry in enumerate(arfp):
+        for i, entry in enumerate(arfp.keys):
             if entries is None or len(entries) == 0 or pp.relpath(entry) in entries:
                 enode = arfp[entry]
                 if options.get("verbose", False):
@@ -530,7 +530,7 @@ def repack_file(path, **options):
         tdir = mkdtemp()
         log.info("Repacking %s", path)
         _fdir, fbase = os.path.split(path)
-        retcode = call(cmd + [path, os.path.join(tdir, fbase)])
+        retcode = call([*cmd, path, os.path.join(tdir, fbase)])
         if retcode == 0:
             copy(os.path.join(tdir, fbase), path)
         else:

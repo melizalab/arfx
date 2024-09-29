@@ -28,8 +28,7 @@ def unpickle_attrs(attrs, old_attrs=None):
     this mapping to attrs, unpickling as needed.
     """
     from itertools import chain
-
-    from pickle import loads, UnpicklingError
+    from pickle import UnpicklingError, loads
 
     if old_attrs is not None:
         olda = dict((k, v) for k, v in old_attrs.iteritems() if k not in attrs)
