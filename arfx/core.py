@@ -21,6 +21,8 @@ import logging
 import os
 import sys
 from functools import cache
+from pathlib import Path
+from typing import Iterable, Optional, Union
 
 import arf
 import h5py as h5
@@ -356,21 +358,22 @@ def delete_entries(src, entries, **options):
         repack_file(src, **options)
 
 
-def copy_entries(tgt, files, **options):
+def copy_entries(
+    tgt: Union[Path, str],
+    files: Iterable[Union[Path, str]],
+    entry_base: Optional[str] = None,
+    **options,
+) -> None:
     """
     Copy data from another arf file. Arguments can refer to entire arf
     files (just the filename) or specific entries (using path
     notation).  Record IDs and all other metadata are copied with the entry.
 
-    entry_base: if specified, rename entries sequentially in target file
+    entry_base: if specified, rename entries sequentially in target file using this base
     """
-    import posixpath as pp
-
     from h5py import Group
 
-    ebase = options.get("template", None)
     acache = cache(arf.open_file)
-
     with arf.open_file(tgt, "a") as arfp:
         arf.check_file_version(arfp)
         for f in files:
@@ -378,27 +381,27 @@ def copy_entries(tgt, files, **options):
             # file.arf is a file; file.arf/entry is entry
             # dir/file.arf is a file; dir/file.arf/entry is entry
             # on windows, dir\file.arf/entry is an entry
-            pn, fn = pp.split(f)
-            if os.path.isfile(f):
-                it = ((f, entry) for ename, entry in acache(f, mode="r").items())
-            elif os.path.isfile(pn, mode="r"):
-                fp = acache(pn)
-                if fn in fp:
-                    it = ((pn, fp[fn]),)
-                else:
+            src = Path(f)
+            if src.is_file():
+                items = ((src, entry) for _, entry in acache(f, mode="r").items())
+            elif src.parent.is_file():
+                fp = acache(src.parent, mode="r")
+                try:
+                    items = ((src.parent, fp[src.name]),)
+                except KeyError:
                     log.error("unable to copy %s: no such entry", f)
                     continue
             else:
                 log.error("unable to copy %s: does not exist", f)
                 continue
 
-            for fname, entry in it:
-                if ebase is not None:
+            for fname, entry in items:
+                if entry_base is not None:
                     entry_name = default_entry_template.format(
-                        base=ebase, index=arf.count_children(arfp, Group)
+                        base=entry_base, index=arf.count_children(arfp, Group)
                     )
                 else:
-                    entry_name = pp.basename(entry.name)
+                    entry_name = Path(entry.name).name
                 arfp.copy(entry, arfp, name=entry_name)
                 log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
