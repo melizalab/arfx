@@ -131,3 +131,18 @@ def test_copy_nonexistent_things(src_file, tmp_path):
     core.copy_entries(tgt_file, [src_file / "no_such_entry"])
     fp = arf.open_file(tgt_file, "r")
     assert len(fp) == 0
+
+
+def test_list_non_existent_file(tmp_path):
+    with pytest.raises(IOError):
+        core.list_entries(tmp_path / "no_such_file.arf")
+
+    
+def test_list_all_entries(src_file):
+    # doesn't test the actual output, just make sure the function runs
+    core.list_entries(src_file)
+
+def test_list_an_entry(src_file):
+    # doesn't test the actual output, just make sure the function runs
+    core.list_entries(src_file, ["entry"])
+    

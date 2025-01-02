@@ -22,7 +22,7 @@ import os
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Union, Sequence
 
 import arf
 import h5py as h5
@@ -405,7 +405,7 @@ def copy_entries(
                 log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
 
-def list_entries(src, entries, **options):
+def list_entries(src: Union[Path, str], entries: Optional[Sequence[str]] = None, **options) -> None:
     """
     List the contents of the file, optionally restricted to specific entries
 
@@ -413,28 +413,24 @@ def list_entries(src, entries, **options):
              that are in this list (more verbosely)
     """
     if not os.path.exists(src):
-        raise IOError("the file %s does not exist" % src)
-    print("%s:" % src)
+        raise IOError(f"the file {src} does not exist")
+    print(f"{src}:")
     with arf.open_file(src, "r") as arfp:
         try:
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
         if entries is None or len(entries) == 0:
-            try:
-                it = arf.keys_by_creation(arfp)
-            except RuntimeError:
-                it = iter(arfp)
-            for name in it:
+            for name in arfp:
                 entry = arfp[name]
                 if isinstance(entry, h5.Dataset):
-                    print("%s: top-level dataset" % entry.name)
+                    print(f"{entry.name}: top-level dataset")
                 elif options.get("verbose", False):
                     print(entry_repr(entry))
                 else:
+                    n_channels = len(entry)
                     print(
-                        "%s: %d channel%s"
-                        % (entry.name, len(entry), pluralize(len(entry)))
+                        f"{entry.name}: {n_channels} channel{pluralize(n_channels)}"
                     )
         else:
             for ename in entries:
