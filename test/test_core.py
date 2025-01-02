@@ -114,9 +114,8 @@ def test_copy_files(src_file, tmp_path):
 
 def test_copy_entry(src_file, tmp_path):
     tgt_file = tmp_path / "output.arf"
-    src_entry = src_file / "entry"
-    core.copy_entries(tgt_file, [src_entry])
-
+    
+    core.copy_entries(tgt_file, [src_file / "entry"])
     with arf.open_file(tgt_file, "r") as fp:
         entry = fp["/entry"]
         assert len(entry) == len(datasets)
@@ -125,3 +124,10 @@ def test_copy_entry(src_file, tmp_path):
         for dset, d in zip(datasets, entry.values()):
             assert d.shape == dset["data"].shape
             assert not arf.is_entry(d)
+
+def test_copy_nonexistent_things(src_file, tmp_path):
+    tgt_file = tmp_path / "output.arf"
+    core.copy_entries(tgt_file, ["no_such_file.arf"])
+    core.copy_entries(tgt_file, [src_file / "no_such_entry"])
+    fp = arf.open_file(tgt_file, "r")
+    assert len(fp) == 0

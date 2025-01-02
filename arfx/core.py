@@ -20,7 +20,7 @@ import argparse
 import logging
 import os
 import sys
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
@@ -371,9 +371,7 @@ def copy_entries(
 
     entry_base: if specified, rename entries sequentially in target file using this base
     """
-    from h5py import Group
-
-    acache = cache(arf.open_file)
+    acache = lru_cache(maxsize=None)(arf.open_file)
     with arf.open_file(tgt, "a") as arfp:
         arf.check_file_version(arfp)
         for f in files:
@@ -395,10 +393,11 @@ def copy_entries(
                 log.error("unable to copy %s: does not exist", f)
                 continue
 
-            for fname, entry in items:
+            n_entries_in_target = arf.count_children(arfp, h5.Group)
+            for i, (fname, entry) in enumerate(items, start=n_entries_in_target):
                 if entry_base is not None:
                     entry_name = default_entry_template.format(
-                        base=entry_base, index=arf.count_children(arfp, Group)
+                        base=entry_base, index=i
                     )
                 else:
                     entry_name = Path(entry.name).name
