@@ -37,8 +37,7 @@ def entry_repr(entry):
     from h5py import h5t
 
     attrs = entry.attrs
-    datatypes = arf.DataTypes._todict()
-    out = "%s" % (entry.name)
+    out = str(entry.name)
     for k, v in attrs.items():
         if k.isupper():
             continue
@@ -46,18 +45,16 @@ def entry_repr(entry):
             out += "\n  timestamp : %s" % arf.timestamp_to_datetime(v).strftime(
                 "%Y-%m-%d %H:%M:%S.%f"
             )
-        elif k == "uuid":
-            out += "\n  uuid : %s" % v
         else:
-            out += "\n  %s : %s" % (k, v)
+            out += f"\n  {k} : {v}" % v
     for name, dset in entry.items():
-        out += "\n  /%s :" % name
+        out += f"\n  /{name} :"
         if isinstance(dset.id.get_type(), h5t.TypeVlenID):
             out += " vlarray"
         else:
-            out += " array %s" % (dset.shape,)
+            out += f" array {dset.shape}"
             if "sampling_rate" in dset.attrs:
-                out += " @ %.1f/s" % dset.attrs["sampling_rate"]
+                out += f" @ {dset.attrs['sampling_rate']:.1f}/s"
             if dset.dtype.names is not None:
                 out += " (compound type)"
 
@@ -66,15 +63,20 @@ def entry_repr(entry):
             units = units.decode("ascii")
         except AttributeError:
             pass
-        out += ", units '%s'" % units
-        out += (
-            ", type %s" % datatypes[dset.attrs.get("datatype", arf.DataTypes.UNDEFINED)]
-        )
+        out += f", units '{units}'"
+        try:
+            datatype_value = dset.attrs["datatype"]
+            datatype_name = arf.DataTypes(datatype_value).name
+        except KeyError:
+            datatype_name = arf.DataTypes.UNDEFINED.name
+        except ValueError:
+            datatype_name = f"UNKNOWN ({datatype_value})"
+        out += f", type {datatype_name}"
         if dset.compression:
             if dset.compression_opts is not None:
-                out += " [%s%d]" % (dset.compression, dset.compression_opts)
+                out += f" [{dset.compression}{dset.compression_opts}]"
             else:
-                out += " [%s%d]" % (dset.compression)
+                out += f" [{dset.compression}]"
     return out
 
 

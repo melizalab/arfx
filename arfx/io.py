@@ -7,40 +7,48 @@ on a plugin architecture.
 Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-09-19
 """
+from importlib.metadata import entry_points
+from pathlib import Path
+from typing import Optional, Type, Union
+
 _entrypoint = "arfx.io"
 
 
-def open(filename, *args, **kwargs):
+def open(filename: Union[str, Path], *args, **kwargs):
     """Open a file and return an appropriate object, based on extension.
 
-    The handler class is dynamically dispatched using setuptools plugin
-    architecture. (see package docstring for details)
+    The handler class is dynamically dispatched using Python's entry points system.
+    Arguments are passed to the initializer for the handler.
 
-    arguments are passed to the initializer for the handler
+    Args:
+        filename: Path to the file to open
+        *args: Positional arguments passed to the handler
+        **kwargs: Keyword arguments passed to the handler
+
+    Returns:
+        An instance of the appropriate handler class
+
+    Raises:
+        TypeError: If no handler is found for the file extension
 
     """
-    from os.path import splitext
-
-    from pkg_resources import iter_entry_points
-
-    ext = splitext(filename)[1].lower()
-    cls = None
-    for ep in iter_entry_points(_entrypoint, ext):
-        cls = ep.load()
+    ext = Path(filename).suffix.lower()
+    cls = _get_handler_class(ext)
     if cls is None:
-        raise TypeError("No handler defined for files of type '%s'" % ext)
+        raise TypeError(f"No handler defined for files of type '{ext}'")
     return cls(filename, *args, **kwargs)
 
 
-def list_plugins():
-    """Returns a printable list of plugins registered to the arfx.io entry point"""
-    from pkg_resources import iter_entry_points
+def list_plugins() -> str:
+    """Returns a string listing plugins registered to the arfx.io entry point"""
+    eps = entry_points()
+    if hasattr(eps, 'select'):  # Python 3.10+ style
+        formats = [ep.name for ep in eps.select(group=_entrypoint)]
+    else:  # Older style
+        formats = [ep.name for ep in eps.get(_entrypoint, [])]
+    return "Supported file formats: " + " ".join(formats)
 
-    return "Supported file formats: " + " ".join(
-        ep.name for ep in iter_entry_points(_entrypoint)
-    )
-
-
+    
 def is_appendable(shape1, shape2):
     """Returns true if two array shapes are the same except for the first dimension"""
     from itertools import zip_longest
@@ -66,6 +74,26 @@ def extended_shape(shape1, shape2):
                 "data shape is not compatible with previously written data"
             )
 
+def _get_handler_class(extension: str) -> Optional[Type]:
+    """Get the (first) handler class for a given file extension.
+
+    Args:
+        extension: The file extension including the dot (e.g., '.txt')
+
+    Returns:
+        The handler class if found, None otherwise
+    """
+    # entry_points() accepts a group parameter in newer versions
+    eps = entry_points()
+    if hasattr(eps, 'select'):  # Python 3.10+ style
+        matching_eps = eps.select(group=_entrypoint, name=extension)
+    else:  # Older style
+        matching_eps = [
+            ep for ep in eps.get(_entrypoint, [])
+            if ep.name == extension
+        ]
+
+    return matching_eps[0].load() if matching_eps else None
 
 # Variables:
 # End:
