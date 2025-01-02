@@ -29,26 +29,34 @@ def open(filename: Union[str, Path], *args, **kwargs):
         An instance of the appropriate handler class
 
     Raises:
-        TypeError: If no handler is found for the file extension
+        ValueError: If no handler is found for the file extension
 
     """
     ext = Path(filename).suffix.lower()
-    cls = _get_handler_class(ext)
-    if cls is None:
-        raise TypeError(f"No handler defined for files of type '{ext}'")
-    return cls(filename, *args, **kwargs)
+    try:
+        (ep,) = entry_points(group=_entrypoint, name=ext)
+        cls = ep.load()
+        return cls(filename, *args, **kwargs)
+    except ValueError:
+        raise ValueError(f"No handler defined for files of type '{ext}'")
+    except TypeError:
+        # shim for python < 3.10
+        for ep in entry_points().get(_entrypoint, []):
+            if ep.name == ext:
+                cls = ep.load()
+                return cls(filename, *args, **kwargs)
+        raise ValueError(f"No handler defined for files of type '{ext}'")
 
 
 def list_plugins() -> str:
     """Returns a string listing plugins registered to the arfx.io entry point"""
-    eps = entry_points()
-    if hasattr(eps, 'select'):  # Python 3.10+ style
-        formats = [ep.name for ep in eps.select(group=_entrypoint)]
-    else:  # Older style
-        formats = [ep.name for ep in eps.get(_entrypoint, [])]
-    return "Supported file formats: " + " ".join(formats)
+    try:
+        eps = entry_points(group=_entrypoint)
+    except TypeError:
+        eps = entry_points().get(_entrypoint, [])
+    return [ep.name for ep in eps]
 
-    
+
 def is_appendable(shape1, shape2):
     """Returns true if two array shapes are the same except for the first dimension"""
     from itertools import zip_longest
@@ -74,6 +82,7 @@ def extended_shape(shape1, shape2):
                 "data shape is not compatible with previously written data"
             )
 
+
 def _get_handler_class(extension: str) -> Optional[Type]:
     """Get the (first) handler class for a given file extension.
 
@@ -85,15 +94,13 @@ def _get_handler_class(extension: str) -> Optional[Type]:
     """
     # entry_points() accepts a group parameter in newer versions
     eps = entry_points()
-    if hasattr(eps, 'select'):  # Python 3.10+ style
+    if hasattr(eps, "select"):  # Python 3.10+ style
         matching_eps = eps.select(group=_entrypoint, name=extension)
     else:  # Older style
-        matching_eps = [
-            ep for ep in eps.get(_entrypoint, [])
-            if ep.name == extension
-        ]
+        matching_eps = [ep for ep in eps.get(_entrypoint, []) if ep.name == extension]
 
     return matching_eps[0].load() if matching_eps else None
+
 
 # Variables:
 # End:

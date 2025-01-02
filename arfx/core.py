@@ -582,6 +582,11 @@ def datatype_list():
     return out
 
 
+def format_list():
+    fmts = io.list_plugins()
+    return f"Supported file formats: {' '.join(fmts)}"
+
+
 def arfx():
     p = argparse.ArgumentParser(
         description="copy data in and out of ARF files",
@@ -599,7 +604,7 @@ def arfx():
         "--help-formats",
         help="list supported file types and exit",
         action="version",
-        version=io.list_plugins(),
+        version=format_list(),
     )
     # operations
     pp = p.add_argument_group("Operations")
