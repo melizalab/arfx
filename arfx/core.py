@@ -20,6 +20,7 @@ import argparse
 import logging
 import os
 import sys
+from functools import cache
 
 import arf
 import h5py as h5
@@ -367,10 +368,8 @@ def copy_entries(tgt, files, **options):
 
     from h5py import Group
 
-    from .tools import memoized
-
     ebase = options.get("template", None)
-    acache = memoized(arf.open_file)
+    acache = cache(arf.open_file)
 
     with arf.open_file(tgt, "a") as arfp:
         arf.check_file_version(arfp)
@@ -381,8 +380,8 @@ def copy_entries(tgt, files, **options):
             # on windows, dir\file.arf/entry is an entry
             pn, fn = pp.split(f)
             if os.path.isfile(f):
-                it = ((f, entry) for ename, entry in acache(f).items())
-            elif os.path.isfile(pn):
+                it = ((f, entry) for ename, entry in acache(f, mode="r").items())
+            elif os.path.isfile(pn, mode="r"):
                 fp = acache(pn)
                 if fn in fp:
                     it = ((pn, fp[fn]),)
