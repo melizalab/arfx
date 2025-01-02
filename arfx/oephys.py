@@ -330,7 +330,7 @@ def script(argv=None):
                     name=rec_name,
                     timestamp=timestamp,
                     entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
-                    **rec.attrs
+                    **rec.attrs,
                 )
                 if args.attrs is not None:
                     arf.set_attributes(entry, **args.attrs)
@@ -371,7 +371,7 @@ def script(argv=None):
                                 datatype=args.datatype,
                                 offset=dset.offset,
                                 sampling_rate=dset.sampling_rate,
-                                **info
+                                **info,
                             )
                             datasets.append((idx, tgt))
                         if len(datasets) == 0:
@@ -398,7 +398,7 @@ def script(argv=None):
                             datatype=arf.DataTypes.EVENT,
                             sampling_rate=dset.sampling_rate,
                             units=dset.units,
-                            **dset.attrs
+                            **dset.attrs,
                         )
 
 

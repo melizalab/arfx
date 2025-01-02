@@ -118,7 +118,7 @@ def main(argv=None):
                     name,
                     selected,
                     offset=offset + src_dset_offset,
-                    **src_dset_attrs
+                    **src_dset_attrs,
                 )
             tgt_entry_index += 1
 

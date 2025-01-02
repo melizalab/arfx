@@ -573,6 +573,13 @@ def setup_log(log, debug=False):
     log.addHandler(ch)
 
 
+def datatype_list():
+    out = str(arf.DataTypes.__doc__)
+    for dtype in arf.DataTypes:
+        out += f"\n{dtype.name}:{dtype.value}"
+    return out
+
+
 def arfx():
     p = argparse.ArgumentParser(
         description="copy data in and out of ARF files",
@@ -584,7 +591,7 @@ def arfx():
         "--help-datatypes",
         help="print available datatypes and exit",
         action="version",
-        version=arf.DataTypes._doc(),
+        version=datatype_list(),
     )
     p.add_argument(
         "--help-formats",

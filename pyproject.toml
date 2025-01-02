@@ -1,18 +1,104 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-build-backend = "setuptools.build_meta"
+[project]
+name = "arfx"
+version = "2.7.0"
+description = "Advanced Recording Format Tools"
+readme = "README.rst"
+requires-python = ">=3.8"
+license = {text = "BSD 3-Clause License"}
+authors = [
+    {name = "C Daniel Meliza", email = "dan@meliza.org"},
+]
+maintainers = [
+    {name = "C Daniel Meliza", email = "dan@meliza.org"},
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: Unix",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Natural Language :: English"
+]
+dependencies = [
+    "arf>=2.7.0",
+    "ewave>=1.0.7",
+    "tqdm",
+    "natsort",
+]
+
+[project.urls]
+Homepage = "https://github.com/melizalab/arfx"
+
+[project.scripts]
+arfx = "arfx.core:arfx"
+arfx-split = "arfx.splitter:main"
+arfx-select = "arfx.select:main"
+arfx-collect-sampled = "arfx.collect:collect_sampled_script"
+arfx-oephys = "arfx.oephys:script"
+
+[project.entry-points."arfx.io"]
+".pcm" = "arfx.pcmio:pcmfile"
+".dat" = "arfx.pcmio:pcmfile"
+".npy" = "arfx.npyio:npyfile"
+".mda" = "arfx.mdaio:mdafile"
+".wav" = "ewave:wavfile"
+
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.3,<9",
+    "pytest-cov >= 4.1.0",
+    "ruff>=0.7.0"
+]
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v --cov=arfx --cov-report=term-missing"
+testpaths = ["test"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38"]
+include = '\.pyi?$'
 
 [tool.ruff]
-target-version = "py37"
+line-length = 88
+target-version = "py38"
+extend-exclude = ["build", "attic"]
 
 [tool.ruff.lint]
-extend-select = [
-  "B",   # flake8-bugbear
-  "I",   # isort
-  "PGH", # pygrep-hooks
-  "RUF", # Ruff-specific
-  "NPY201", # numpy 2.0 migration
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
 ]
-preview = true
+ignore = ["E221", "E501", "E701"]
 
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+strict_optional = true
+check_untyped_defs = true
+
+[tool.hatch.build]
+include = ["arfx/**"]
+exclude = ["*test*"]
+artifacts = ["README.rst"]

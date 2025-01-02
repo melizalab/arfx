@@ -40,7 +40,7 @@ class pcmfile:
         dtype="h",
         nchannels=1,
         byteorder="<",
-        **kwargs
+        **kwargs,
     ):
         from numpy import dtype as ndtype
 

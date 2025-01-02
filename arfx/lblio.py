@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-"""Read and write lbl format files. 
+"""Read and write lbl format files.
 
 lbl is a format developed by the Margoliash lab. It's not a very good or
 flexible format, but it's what the venerable data inspection and labeling
