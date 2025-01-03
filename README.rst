@@ -49,20 +49,14 @@ similar to ``tar``. Operations are as follows:
 -  **-x:** extract entries from the container
 -  **-d:** delete entries from the container
 
-Options specify the target ARF file, verbosity, automatic naming
-schemes, and any metadata to be stored in the entry.
+Options specify the target ARF file, verbosity, automatic naming schemes, and
+any metadata to be stored in the entry. Some important options include:
 
 -  **-f FILE:** use ARF file FILE
 -  **-v:** verbose output
 -  **-n NAME:** name entries sequentially, using NAME as the base
--  **-a ANIMAL:** specify the animal
--  **-e EXPERIMENTER:** specify the experimenter
--  **-p PROTOCOL:** specify the protocol
--  **-s HZ:** specify the sampling rate of the data, in Hz
+-  **-k key=value** add metadata to the entries
 -  **-T DATATYPE:** specify the type of data
--  **-u:** do not compress data in the arf file
--  **-P:** when deleting entries, do not repack
--  **-C:** specify a target directory for extracting files   
 
 input files
 ~~~~~~~~~~~
@@ -109,7 +103,7 @@ Supported field names include ``entry``, ``channel``, and ``index``, as
 well as the names of any HDF5 attributes stored on the entry or channel.
 The extension of the output template is used to determine the file
 format. Currently only ``wave`` is supported, but additional formats may
-be supplied as plugins (see 4).
+be supplied as plugins (see below).
 
 The metadata options are ignored when extracting files; any metadata
 present in the ARF container that is also supported by the target
@@ -133,7 +127,7 @@ free up the space, so the file is repacked unless the ``-P`` option is
 set.
 
 The ``-U`` (update) operation can be used to add or update attributes of
-entries, and to rename entries (if the ``-n`` flag is set).
+entries.
 
 The ``--write-attr`` operation can be used to store the contents of text
 files in top-level attributes. The attributes have the name
@@ -157,14 +151,29 @@ Currently, no effort is made to splice data across entries or files.
 This may result in some short entries. Only sampled datasets are
 processed.
 
+arfx-oephys
+~~~~~~~~~~~
+
+Converts the output of an `open-ephys <https://open-ephys.org/>`_ recording into an ARF file. open-ephys stores its data in a big complex directory tree, which this script will navigate and store in an appropriately timestamped entry in the ARF file. Has not been tested with data from outside our lab. Example invocation::
+
+   arfx-oephys -T EXTRAC_HP -k experimenter=smm3rc -k bird=C194 -k pen=1 -k site=1 -k protocol=chorus -f C194_1_1.arf C194_2023-10-16_16-30-54_chorus/
+
+We typically run this command before starting spike sorting to create a copy of the recording for archival.
+
 arfx-collect-sampled
 ~~~~~~~~~~~~~~~~~~~~
 
-This script is used to export data into a flat binary structure. It
-collects sampled data across channels and entries into a single 2-D
-array. The output can be stored in a multichannel wav file or in a raw
-binary ``dat`` format (N samples by M channels), which is used by a wide
-variety of spike-sorting tools.
+This script is used to export data into a flat binary structure. It collects
+sampled data across channels and entries into a single 2-D array. The output can
+be stored in a multichannel wav file or in a raw binary ``dat`` format (N
+samples by M channels), which is used by a wide variety of spike-sorting tools.
+We use this script if we ever have to re-sort a recording after deleting the
+original raw recording.
+
+arfx-select
+~~~~~~~~~~~
+
+This is a pretty specialized script that takes in a table of segments defined by entry name and start/stop time and copies them to a new ARF file. It's usually better to just write analysis code to directly access the desired data from the original file, but it can be useful as a first stage in exporting small segments of a recording to wave files for sharing or depositing.
 
 extending arfx
 --------------

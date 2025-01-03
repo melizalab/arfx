@@ -11,6 +11,7 @@ import os
 
 import arf
 import numpy as np
+from tqdm import tqdm
 
 from . import io
 from .core import __version__, setup_log
@@ -99,8 +100,6 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
 
 def iter_entry_chunks(entry, channels, predicate):
     """Iterate through the datasets in entry (that match predicate), yielding chunks"""
-    from tqdm import tqdm
-
     props = channel_properties(entry, channels, predicate)
     nchannels = len(props)
     nsamples = first(props, operator.itemgetter("samples"))

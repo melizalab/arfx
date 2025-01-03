@@ -230,7 +230,7 @@ def script(argv=None):
         "--help-datatypes",
         help="print available datatypes and exit",
         action="version",
-        version=arf.DataTypes._doc(),
+        version=core.format_list()
     )
 
     p.add_argument(
@@ -240,12 +240,6 @@ def script(argv=None):
         "--dry-run",
         action="store_true",
         help="load data but do not write anything to disk",
-    )
-    p.add_argument(
-        "--progress",
-        "-p",
-        action="store_true",
-        help="show a progress bar",
     )
 
     p.add_argument("--skip-empty", action="store_true", help="skip empty datasets")
