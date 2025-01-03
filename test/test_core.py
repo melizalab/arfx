@@ -104,9 +104,10 @@ def test_add_entries(src_wav_files, tmp_path):
     core.add_entries(tgt_file, src_wav_files)
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry in zip(datasets, fp.values()):
-            assert Path(entry.name).name == dset["name"]
-            d = entry["pcm"]  # data always stored as pcm
+        # iteration is not by creation time in h5py 3.11 (py38)
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+            assert Path(entry_name).name == dset["name"]
+            d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
             assert d.shape == dset["data"].shape
             assert np.all(d[:] == dset["data"])
@@ -122,8 +123,10 @@ def test_add_entries_with_metadata(src_wav_files, tmp_path):
     )
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry in zip(datasets, fp.values()):
-            assert Path(entry.name).name == dset["name"]
+        # iteration is not by creation time in h5py 3.11 (py38)
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+            assert Path(entry_name).name == dset["name"]
+            entry = fp[entry_name]
             assert entry.attrs["my_attr"] == "test_value"
             d = entry["pcm"]  # data always stored as pcm
             assert d.attrs["datatype"] == arf.DataTypes.ACOUSTIC
@@ -134,8 +137,8 @@ def test_add_entries_with_template(src_wav_files, tmp_path):
     core.add_entries(tgt_file, src_wav_files, template="entry")
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry in zip(datasets, fp.values()):
-            d = entry["pcm"]  # data always stored as pcm
+        for dset, entry_name in zip(datasets, fp):
+            d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
             assert d.shape == dset["data"].shape
             assert np.all(d[:] == dset["data"])
@@ -157,9 +160,9 @@ def test_script_add_entries(src_wav_files, tmp_path):
     core.arfx(argv)
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry in zip(datasets, fp.values()):
-            assert Path(entry.name).name == dset["name"]
-            d = entry["pcm"]  # data always stored as pcm
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+            assert Path(entry_name).name == dset["name"]
+            d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
             assert d.shape == dset["data"].shape
             assert np.all(d[:] == dset["data"])
