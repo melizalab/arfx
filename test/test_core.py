@@ -150,6 +150,36 @@ def test_extract_entries_with_template(src_arf_file, tmp_path):
             assert data.shape == dset["data"].shape
             assert np.all(data == dset["data"])
 
+            
+def test_delete_entry(src_arf_file):
+    core.delete_entries(src_arf_file, ["entry"])
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert len(fp) == 0
+
+
+def test_delete_nonexistent_entry(src_arf_file):
+    core.delete_entries(src_arf_file, ["no_such_entry"])
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert "entry" in fp
+
+        
+def test_update_all_entries(src_arf_file):
+    core.update_entries(src_arf_file, None, my_attr="test_value")
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert fp["entry"].attrs["my_attr"] == "test_value"
+
+        
+def test_update_entry(src_arf_file):
+    core.update_entries(src_arf_file, ["entry"], my_attr="test_value")
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert fp["entry"].attrs["my_attr"] == "test_value"
+
+
+def test_update_nonexistent_entry(src_arf_file):
+    core.update_entries(src_arf_file, ["no_such_entry"], my_attr="test_value")
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert "my_attr" not in fp["entry"].attrs
+        
 
 def test_copy_file(src_arf_file, tmp_path):
     tgt_file = tmp_path / "output.arf"

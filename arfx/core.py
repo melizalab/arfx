@@ -20,9 +20,10 @@ import argparse
 import logging
 import os
 import sys
+import posixpath as pp
 from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional, Union
 
 import arf
@@ -160,11 +161,11 @@ def parse_name_template(
             elif field == "entry":
                 if not entry:
                     raise ValueError(f"can't resolve `entry` field for {node}")
-                values[field] = Path(entry.name).name
+                values[field] = PurePosixPath(entry.name).name
             elif field == "channel":
                 if not dset:
                     raise ValueError(f"can't resolve `channel` field for {node}")
-                values[field] = Path(dset.name).name
+                values[field] = PurePosixPath(dset.name).name
             elif field == "index":
                 values[field] = index
             elif dset is not None and hasattr(dset, field):
@@ -319,7 +320,7 @@ def extract_entries(
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
-        for index, ename in enumerate(arf.keys_by_creation(arfp)):
+        for index, ename in enumerate(arfp):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
             mtime = attrs.get("timestamp", [None])[0]
@@ -349,21 +350,20 @@ def extract_entries(
                     log.debug("%s -> %s", dset.name, fname)
 
 
-def delete_entries(src, entries, **options):
+def delete_entries(src: Union[Path, str], entries: Iterable[str], *, repack: bool = True, **options):
     """
     Delete one or more entries from a file.
 
     entries: list of the entries to delete
     repack: if True (default), repack the file afterward to reclaim space
     """
-    if not os.path.exists(src):
-        raise IOError("the file %s does not exist" % src)
-    if entries is None or len(entries) == 0:
-        return
+    src = Path(src)
+    if not src.is_file():
+        raise IOError(f"the file {src} does not exist")
 
+    count = 0
     with arf.open_file(src, "r+") as arfp:
         arf.check_file_version(arfp)
-        count = 0
         for entry in entries:
             if entry in arfp:
                 try:
@@ -374,7 +374,7 @@ def delete_entries(src, entries, **options):
                     log.error("unable to delete %s: %s", entry, e)
             else:
                 log.debug("unable to delete %s: no such entry", entry)
-    if count > 0 and options["repack"]:
+    if count > 0 and repack:
         repack_file(src, **options)
 
 
@@ -418,7 +418,7 @@ def copy_entries(
                 if entry_base is not None:
                     entry_name = default_entry_template.format(base=entry_base, index=i)
                 else:
-                    entry_name = Path(entry.name).name
+                    entry_name = PurePosixPath(entry.name).name
                 arfp.copy(entry, arfp, name=entry_name)
                 log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
@@ -456,45 +456,32 @@ def list_entries(
                     print(entry_repr(arfp[ename]))
 
 
-def update_entries(src, entries, **options):
+def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, verbose: bool = False, **metadata):
     """
-    Update metadata on one or more entries
+    Update metadata on one or more entries.
 
-    entries: if None or empty, updates all entries. In this case, if the
-             name parameter is set, the entries are renamed sequentially
+    entries: List of entries to update. If None, updates all entries.
+    metadata: key-value pairs to set (old values are kept)
     """
-    import posixpath as pp
-
-    if not os.path.exists(src):
-        raise IOError("the file %s does not exist" % src)
-    ebase = options.get("template", None)
-    if (entries is None or len(entries) == 0) and ebase is not None:
-        if ebase.find("{") < 0:
-            raise ValueError(
-                "with multiple entries, template needs to have {} formatter fields"
-            )
-    metadata = options.get("attrs", None) or dict()
-    if "datatype" in options:
-        metadata["datatype"] = options["datatype"]
+    src = Path(src)
+    if not src.is_file():
+        raise IOError(f"the file {src} does not exist")
 
     with arf.open_file(src, "r+") as arfp:
         try:
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
-        for i, entry in enumerate(arfp.keys):
-            if entries is None or len(entries) == 0 or pp.relpath(entry) in entries:
-                enode = arfp[entry]
-                if options.get("verbose", False):
+        for i, entry_name in enumerate(arfp):
+            entry_name = PurePosixPath(entry_name).name
+            if entries is None or entry_name in entries:
+                enode = arfp[entry_name]
+                if verbose:
                     print("vvvvvvvvvv")
                     print(entry_repr(enode))
                     print("**********")
-                if ebase:
-                    name = parse_name_template(enode, ebase, index=i)
-                    arfp[name] = enode
-                    del arfp[entry]  # entry object should remain valid
                 arf.set_attributes(enode, **metadata)
-                if options.get("verbose", False):
+                if verbose:
                     print(entry_repr(enode))
                     print("^^^^^^^^^^")
 
@@ -569,6 +556,7 @@ class ParseKeyVal(argparse.Action):
         setattr(namespace, self.dest, kv)
 
 
+# FIXME    
 class ParseDataType(argparse.Action):
     def __call__(self, parser, namespace, arg, option_string=None):
         if not arg.isdigit():
