@@ -21,11 +21,10 @@ import logging
 import os
 import shutil
 import subprocess
-from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from typing import Optional, Tuple, Union
+from typing import Container, Iterable, Optional, Sequence, Tuple, Union
 
 import arf
 import h5py as h5
