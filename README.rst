@@ -1,5 +1,5 @@
 arfx
-----
+====
 
 |ProjectStatus|_ |Version|_ |BuildStatus|_ |License|_ |PythonVersions|_
 
@@ -24,7 +24,7 @@ open, portable file format for storing behavioral and neural data, based
 on `HDF5 <http://www.hdfgroup.org/HDF5>`__.
 
 installation
-~~~~~~~~~~~~
+------------
 
 .. code:: bash
 
@@ -36,8 +36,8 @@ or from source:
 
    python setup.py install
 
-usage
-~~~~~
+use
+---
 
 The general syntax is ``arfx operation [options] files``. The syntax is
 similar to ``tar``. Operations are as follows:
@@ -62,9 +62,10 @@ schemes, and any metadata to be stored in the entry.
 -  **-T DATATYPE:** specify the type of data
 -  **-u:** do not compress data in the arf file
 -  **-P:** when deleting entries, do not repack
+-  **-C:** specify a target directory for extracting files   
 
 input files
-           
+~~~~~~~~~~~
 
 **arfx** can read sampled data from ``pcm``, ``wave``, ``npy`` and
 ``mda`` files. Support for additional file formats can be added as
@@ -92,7 +93,7 @@ tool. More specialized import procedures can be easily written in Python
 using the ``arf`` library.
 
 output files
-            
+~~~~~~~~~~~~
 
 The entries to be extracted (in ``-x`` mode) can be specified by name.
 If no names are specified, all the entries are extracted. All sampled
@@ -115,7 +116,7 @@ present in the ARF container that is also supported by the target
 container is copied.
 
 other operations
-                
+~~~~~~~~~~~~~~~~                
 
 As with ``tar``, the ``-t`` operation will list the contents of the
 archive. Each entry/channel is listed on a separate line in path
@@ -141,13 +142,13 @@ out those attributes. This is useful when data collection programs
 generate log or settings files that you want to store in the ARF file.
 
 other utilities
-~~~~~~~~~~~~~~~
+---------------
 
 This package comes with a few additional scripts that do fairly specific
 operations.
 
 arfx-split
-^^^^^^^^^^
+~~~~~~~~~~
 
 This script is used to reorganize very large recordings, possibly
 contained in multiple files, into manageable chunks. Each new entry is
@@ -157,7 +158,7 @@ This may result in some short entries. Only sampled datasets are
 processed.
 
 arfx-collect-sampled
-^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~
 
 This script is used to export data into a flat binary structure. It
 collects sampled data across channels and entries into a single 2-D
@@ -166,7 +167,7 @@ binary ``dat`` format (N samples by M channels), which is used by a wide
 variety of spike-sorting tools.
 
 extending arfx
-~~~~~~~~~~~~~~
+--------------
 
 Additional formats for reading and writing can be added using the Python
 setuptools plugin system. Plugins must be registered in the ``arfx.io``
@@ -220,7 +221,7 @@ Default is 0, and **arfx** will not attempt to change the property if
 ``nentries`` is 1.
 
 version information
-~~~~~~~~~~~~~~~~~~~
+-------------------
 
 **arfx** uses semantic versioning and is synchronized with the
 major/minor version numbers of the arf package specification.

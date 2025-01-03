@@ -20,9 +20,10 @@ import argparse
 import logging
 import os
 import sys
+from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Optional, Union, Sequence
+from typing import Optional, Union
 
 import arf
 import h5py as h5
@@ -36,7 +37,7 @@ default_entry_template = "{base}_{index:04}"
 log = logging.getLogger("arfx")  # root logger
 
 
-def entry_repr(entry):
+def entry_repr(entry: h5.Group) -> str:
     from h5py import h5t
 
     attrs = entry.attrs
@@ -83,7 +84,7 @@ def entry_repr(entry):
     return out
 
 
-def dataset_properties(dset):
+def dataset_properties(dset: h5.Dataset) -> tuple[str, str, int]:
     """Infers the type of data and some properties of an hdf5 dataset.
 
     Returns tuple: (sampled|event|interval|unknown), (array|table|vlarry), ncol
@@ -116,7 +117,7 @@ def dataset_properties(dset):
         return "event", "array", ncols
 
 
-def pluralize(n, sing="", plurl="s"):
+def pluralize(n: int, sing: str = "", plurl: str = "s") -> str:
     """Returns 'sing' if n == 1, else 'plurl'"""
     if n == 1:
         return sing
@@ -124,29 +125,31 @@ def pluralize(n, sing="", plurl="s"):
         return plurl
 
 
-def parse_name_template(node, template, index=0, default="NA"):
+def parse_name_template(
+    node: Union[h5.Group, h5.Dataset],
+    template: str,
+    index: int = 0,
+    default: str = "NA",
+) -> str:
     """Generates names for output files using a template and the entry/dataset attributes
 
     see http://docs.python.org/library/string.html#format-specification-mini-language for template formatting
 
-    dset - a dataset object
+    node - a dataset or group object
     template - string with formatting codes, e.g. {animal}
                Values are looked up in the dataset attributes, and then the parent entry attributes.
                (entry) and (channel) refer to the name of the entry and dataset
     index - value to insert for {index} key (usually the index of the entry in the file)
     default - value to replace missing keys with
     """
-    import posixpath as pp
     from string import Formatter
-
-    from h5py import Dataset, Group
 
     f = Formatter()
     values = dict()
     entry = dset = None
-    if isinstance(node, Group):
+    if isinstance(node, h5.Group):
         entry = node
-    elif isinstance(node, Dataset):
+    elif isinstance(node, h5.Dataset):
         dset = node
         entry = dset.parent
 
@@ -157,11 +160,11 @@ def parse_name_template(node, template, index=0, default="NA"):
             elif field == "entry":
                 if not entry:
                     raise ValueError(f"can't resolve `entry` field for {node}")
-                values[field] = pp.basename(entry.name)
+                values[field] = Path(entry.name).name
             elif field == "channel":
                 if not dset:
                     raise ValueError(f"can't resolve `channel` field for {node}")
-                values[field] = pp.basename(dset.name)
+                values[field] = Path(dset.name).name
             elif field == "index":
                 values[field] = index
             elif dset is not None and hasattr(dset, field):
@@ -182,13 +185,14 @@ def parse_name_template(node, template, index=0, default="NA"):
         raise ValueError(f"template error: {e.message}") from e
 
 
-def iter_entries(src, cbase="pcm"):
+def iter_entries(src: Union[Path, str], cbase: str = "pcm"):
     """Iterate through the entries and channels of a data source.
 
     Yields (data, entry index, entry name,)
     """
+    src = Path(src)
     fp = io.open(src, "r")
-    fbase = os.path.splitext(os.path.basename(src))[0]
+    fbase = src.stem
     nentries = getattr(fp, "nentries", 1)
     for entry in range(nentries):
         try:
@@ -203,7 +207,15 @@ def iter_entries(src, cbase="pcm"):
             yield fp, entry, ename
 
 
-def add_entries(tgt, files, **options):
+def add_entries(
+    tgt: Union[Path, str],
+    files: Sequence[Union[Path, str]],
+    *,
+    compress: Optional[str] = None,
+    template: Optional[str] = None,
+    datatype: Optional[arf.DataTypes] = arf.DataTypes.UNDEFINED,
+    **metadata,
+) -> None:
     """
     Add data to a file. This is a general-purpose function that will
     iterate through the entries in the source files (or groups of
@@ -213,12 +225,6 @@ def add_entries(tgt, files, **options):
     Additional keyword arguments specify metadata on the newly created
     entries.
     """
-    from h5py import Group
-
-    compress = options.get("compress", None)
-    ebase = options.get("template", None)
-    metadata = options.get("attrs", None) or dict()
-    datatype = options.get("datatype", arf.DataTypes.UNDEFINED)
     chan = "pcm"  # only pcm data can be imported
 
     if len(files) == 0:
@@ -229,6 +235,7 @@ def add_entries(tgt, files, **options):
         arf.set_attributes(
             arfp, file_creator="org.meliza.arfx/arfx " + __version__, overwrite=False
         )
+        next_entry_index = arf.count_children(arfp, h5.Group)
         for f in files:
             for fp, entry_index, entry_name in iter_entries(f):
                 timestamp = getattr(fp, "timestamp", None)
@@ -238,17 +245,16 @@ def add_entries(tgt, files, **options):
                         timestamp = os.fstat(fp.fp.fileno()).st_mtime
                     else:
                         raise ValueError(
-                            "%s/%d missing required timestamp" % (f, entry_index)
+                            f"{f}/{entry_index} missing required timestamp"
                         )
                 if not hasattr(fp, "sampling_rate"):
                     raise ValueError(
-                        "%s/%d missing required sampling_rate attribute"
-                        % (f, entry_index)
+                        f"{f}/{entry_index} missing required sampling_rate attribute"
                     )
 
-                if ebase is not None:
+                if template is not None:
                     entry_name = default_entry_template.format(
-                        base=ebase, index=arf.count_children(arfp, Group)
+                        base=template, index=next_entry_index
                     )
                 entry = arf.create_entry(
                     arfp,
@@ -264,35 +270,49 @@ def add_entries(tgt, files, **options):
                     datatype=datatype,
                     sampling_rate=fp.sampling_rate,
                     compression=compress,
-                    source_file=f,
+                    source_file=str(f),
                     source_entry=entry_index,
                 )
+                next_entry_index += 1
                 log.debug("%s/%d -> /%s/%s", f, entry_index, entry_name, chan)
 
 
-def create_and_add_entries(tgt, files, **options):
+def create_and_add_entries(
+    tgt: Union[Path, str], files: Sequence[Union[Path, str]], **options
+) -> None:
     """Add data to a new file. If the file exists it's deleted"""
-    if os.path.exists(tgt):
-        os.remove(tgt)
+    tgt = Path(tgt)
+    if tgt.is_file():
+        tgt.unlink()
     add_entries(tgt, files, **options)
 
 
-def extract_entries(src, entries, channels=None, **options):
+def extract_entries(
+    src: Union[Path, str],
+    tgt_dir: Union[Path, str, None],
+    *,
+    entries: Optional[Container[str]] = None,
+    channels: Optional[Container[str]] = None,
+    template: Optional[str] = None,
+    **options,
+):
     """
     Extract entries from a file.  The format and naming of the output
     containers is determined automatically from the name of the entry
     and the type of data.
 
-    entries: list of the entries to extract. can be None, in which
+    entries: list of the entries to extract. Can be None, in which
              case all the entries are extracted
-    entry_base: if specified, name the output files sequentially
+    channels: list of the channels to extract. Can be None, in which
+              case all of the channels are extracted.
+    template: if specified, name the output files sequentially
     """
-    if not os.path.exists(src):
-        raise IOError("the file %s does not exist" % src)
-
-    if len(entries) == 0:
-        entries = None
-    ebase = options.get("template", None)
+    src = Path(src)
+    if not src.is_file():
+        raise IOError(f"the file {src} does not exist")
+    tgt_dir = Path(".") if tgt_dir is None else Path(tgt_dir)
+    if not tgt_dir.is_dir():
+        raise IOError(f"the target directory {tgt_dir} does not exist")
 
     with arf.open_file(src, "r") as arfp:
         try:
@@ -314,8 +334,8 @@ def extract_entries(src, entries, channels=None, **options):
                         dtype=dset.dtype,
                         **dset.attrs,
                     )
-                    fname = parse_name_template(
-                        dset, ebase or default_extract_template, index=index
+                    fname = tgt_dir / parse_name_template(
+                        dset, template or default_extract_template, index=index
                     )
                     dtype, _stype, _ncols = dataset_properties(dset)
                     if dtype != "sampled":
@@ -396,20 +416,20 @@ def copy_entries(
             n_entries_in_target = arf.count_children(arfp, h5.Group)
             for i, (fname, entry) in enumerate(items, start=n_entries_in_target):
                 if entry_base is not None:
-                    entry_name = default_entry_template.format(
-                        base=entry_base, index=i
-                    )
+                    entry_name = default_entry_template.format(base=entry_base, index=i)
                 else:
                     entry_name = Path(entry.name).name
                 arfp.copy(entry, arfp, name=entry_name)
                 log.debug("%s%s -> %s/%s", fname, entry.name, tgt, entry_name)
 
 
-def list_entries(src: Union[Path, str], entries: Optional[Sequence[str]] = None, **options) -> None:
+def list_entries(
+    src: Union[Path, str], entries: Optional[Iterable[str]] = None, **options
+) -> None:
     """
     List the contents of the file, optionally restricted to specific entries
 
-    entries: if None or empty, list all entries; otherwise only list entries
+    entries: if None, list all entries; otherwise only list entries
              that are in this list (more verbosely)
     """
     if not os.path.exists(src):
@@ -420,7 +440,7 @@ def list_entries(src: Union[Path, str], entries: Optional[Sequence[str]] = None,
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
-        if entries is None or len(entries) == 0:
+        if entries is None:
             for name in arfp:
                 entry = arfp[name]
                 if isinstance(entry, h5.Dataset):
@@ -429,9 +449,7 @@ def list_entries(src: Union[Path, str], entries: Optional[Sequence[str]] = None,
                     print(entry_repr(entry))
                 else:
                     n_channels = len(entry)
-                    print(
-                        f"{entry.name}: {n_channels} channel{pluralize(n_channels)}"
-                    )
+                    print(f"{entry.name}: {n_channels} channel{pluralize(n_channels)}")
         else:
             for ename in entries:
                 if ename in arfp:
