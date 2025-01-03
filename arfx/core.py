@@ -53,7 +53,7 @@ def entry_repr(entry: h5.Group) -> str:
                 "%Y-%m-%d %H:%M:%S.%f"
             )
         else:
-            out += f"\n  {k} : {v}" % v
+            out += f"\n  {k} : {v}"
     for name, dset in entry.items():
         out += f"\n  /{name} :"
         if isinstance(dset.id.get_type(), h5t.TypeVlenID):
@@ -229,7 +229,7 @@ def add_entries(
     chan = "pcm"  # only pcm data can be imported
 
     if len(files) == 0:
-        raise ValueError("must specify one or more input files")
+        raise FileNotFoundError("must specify one or more input files")
 
     if attrs is None:
         attrs = {}
@@ -292,9 +292,9 @@ def create_and_add_entries(
 
 def extract_entries(
     src: Union[Path, str],
-    tgt_dir: Union[Path, str, None],
-    *,
     entries: Optional[Container[str]] = None,
+    *,
+    directory: Union[Path, str, None] = None,
     channels: Optional[Container[str]] = None,
     template: Optional[str] = None,
     **options,
@@ -313,9 +313,9 @@ def extract_entries(
     src = Path(src)
     if not src.is_file():
         raise FileNotFoundError(f"the file {src} does not exist")
-    tgt_dir = Path(".") if tgt_dir is None else Path(tgt_dir)
-    if not tgt_dir.is_dir():
-        raise FileNotFoundError(f"the target directory {tgt_dir} does not exist")
+    directory = Path(".") if directory is None else Path(directory)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"the target directory {directory} does not exist")
 
     with arf.open_file(src, "r") as arfp:
         try:
@@ -337,7 +337,7 @@ def extract_entries(
                         dtype=dset.dtype,
                         **dset.attrs,
                     )
-                    fname = tgt_dir / parse_name_template(
+                    fname = directory / parse_name_template(
                         dset, template or default_extract_template, index=index
                     )
                     dtype, _stype, _ncols = dataset_properties(dset)
@@ -434,8 +434,6 @@ def list_entries(
     entries: if None, list all entries; otherwise only list entries
              that are in this list (more verbosely)
     """
-    if not os.path.exists(src):
-        raise FileNotFoundError(f"the file {src} does not exist")
     print(f"{src}:")
     with arf.open_file(src, "r") as arfp:
         try:
@@ -557,18 +555,12 @@ class ParseKeyVal(argparse.Action):
         setattr(namespace, self.dest, kv)
 
 
-# class ParseDataType(argparse.Action):
-#     def __call__(self, parser, namespace, arg, option_string=None):
-#         try:
-#             if arg.isdigit():
-#                 argx = 
-#         if not arg.isdigit():
-#             argx = arf.DataTypes._fromstring(arg)
-#             if argx is None:
-#                 raise ValueError("'%s' is not a valid data type" % arg)
-#         else:
-#             argx = arg
-#         setattr(namespace, self.dest, int(argx))
+class ParseDataType(argparse.Action):
+    def __call__(self, parser, namespace, arg, option_string=None):
+        if arg.isdigit():
+            setattr(namespace, self.dest, arf.DataTypes(int(arg)))
+        else:
+            setattr(namespace, self.dest, arf.DataTypes[arg])        
 
 
 def setup_log(log, debug=False):
@@ -593,7 +585,7 @@ def format_list():
     return f"Supported file formats: {' '.join(fmts)}"
 
 
-def arfx():
+def arfx(argv=None):
     p = argparse.ArgumentParser(
         description="copy data in and out of ARF files",
     )
@@ -706,11 +698,10 @@ def arfx():
     g.add_argument(
         "-T",
         help="specify data type (see --help-datatypes)",
-        type=arf.DataTypes,
         default=arf.DataTypes.UNDEFINED,
         metavar="DATATYPE",
         dest="datatype",
-        #action=ParseDataType,
+        action=ParseDataType,
     )
     g.add_argument(
         "-k",
@@ -732,25 +723,25 @@ def arfx():
         default=1,
         dest="compress",
     )
+    g.add_argument("--directory", help="when extracting files, store them in this directory", type=Path)
 
-    args = p.parse_args()
+    args = p.parse_args(argv)
     setup_log(log, args.verbose)
 
     try:
         opts = args.__dict__.copy()
-        entries = opts.pop("entries")
+        entries = opts.pop("entries") or None
         args.op(args.arffile, entries, **opts)
-    except Exception as e:
+    except DeprecationWarning as e:
         print("[arfx] error: %s" % e)
-        if isinstance(e, DeprecationWarning):
-            print("      use arfx-migrate to convert to version %s" % arf.spec_version)
-        raise e
-        sys.exit(-1)
-    return 0
+        print("      use arfx-migrate to convert to version %s" % arf.spec_version)
+        p.exit(-1)
+    except (ValueError, FileNotFoundError) as err:
+        p.error(f"[arfx] error: {err}")
 
 
 if __name__ == "__main__":
-    sys.exit(arfx())
+    arfx()
 
 # Variables:
 # End:

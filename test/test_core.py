@@ -135,8 +135,23 @@ def test_add_entries_with_template(src_wav_files, tmp_path):
             assert np.all(d[:] == dset["data"])
 
 
+def test_script_add_entries(src_wav_files, tmp_path):
+    tgt_file = tmp_path / "output.arf"
+    src_wav_files = [str(path) for path in src_wav_files]
+    argv = ["-cvf", str(tgt_file), "-T", "ACOUSTIC", "-k", "this=that", "-z 9", *src_wav_files]
+    core.arfx(argv)
+    with arf.open_file(tgt_file, "r") as fp:
+        assert len(fp) == 3
+        for dset, entry in zip(datasets, fp.values()):
+            assert Path(entry.name).name == dset["name"]
+            d = entry["pcm"]  # data always stored as pcm
+            assert d.attrs["sampling_rate"] == dset["sampling_rate"]
+            assert d.shape == dset["data"].shape
+            assert np.all(d[:] == dset["data"])
+
+            
 def test_extract_entries(src_arf_file, tmp_path):
-    core.extract_entries(src_arf_file, tmp_path)
+    core.extract_entries(src_arf_file, directory=tmp_path)
     # only the sampled data can be extracted
     for dset in datasets[:3]:
         tgt_file = tmp_path / f"entry_{dset['name']}.wav"
@@ -150,7 +165,7 @@ def test_extract_entries(src_arf_file, tmp_path):
 
 def test_extract_entries_with_template(src_arf_file, tmp_path):
     core.extract_entries(
-        src_arf_file, tmp_path, template="entry_{index:04}_{channel}.wav"
+        src_arf_file, directory=tmp_path, template="entry_{index:04}_{channel}.wav"
     )
     # only the sampled data can be extracted
     for dset in datasets[:3]:
@@ -163,6 +178,39 @@ def test_extract_entries_with_template(src_arf_file, tmp_path):
             assert np.all(data == dset["data"])
 
             
+def test_extract_entry(src_arf_file, tmp_path):
+    core.extract_entries(src_arf_file, ["entry"], directory=tmp_path)
+    # only the sampled data can be extracted
+    for dset in datasets[:3]:
+        tgt_file = tmp_path / f"entry_{dset['name']}.wav"
+        assert tgt_file.exists()
+        with io.open(tgt_file, "r") as fp:
+            assert fp.sampling_rate == dset["sampling_rate"]
+            data = fp.read()
+            assert data.shape == dset["data"].shape
+            assert np.all(data == dset["data"])
+
+
+def test_extract_nonexistent_entry(src_arf_file, tmp_path):
+    core.extract_entries(src_arf_file, ["no_such_entry"], directory=tmp_path)
+    for dset in datasets[:3]:
+        tgt_file = tmp_path / f"entry_{dset['name']}.wav"
+        assert not tgt_file.exists()
+    
+
+def test_script_extract_entries(src_arf_file, tmp_path):
+    argv = ["-xvf", str(src_arf_file), "--directory", str(tmp_path)]
+    core.arfx(argv)
+    for dset in datasets[:3]:
+        tgt_file = tmp_path / f"entry_{dset['name']}.wav"
+        assert tgt_file.exists()
+        with io.open(tgt_file, "r") as fp:
+            assert fp.sampling_rate == dset["sampling_rate"]
+            data = fp.read()
+            assert data.shape == dset["data"].shape
+            assert np.all(data == dset["data"])
+
+        
 def test_delete_entry(src_arf_file):
     core.delete_entries(src_arf_file, ["entry"])
     with arf.open_file(src_arf_file, "r") as fp:
@@ -278,3 +326,5 @@ def test_toplevel_attributes(src_arf_file, tmp_path):
 def test_repack_nonexistent_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         core.repack_file(tmp_path / "no_such_file.arf")
+
+
