@@ -20,11 +20,13 @@ import argparse
 import logging
 import os
 import sys
-import posixpath as pp
+import shutil
+import subprocess
 from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Optional, Union
+from tempfile import TemporaryDirectory
 
 import arf
 import h5py as h5
@@ -215,22 +217,22 @@ def add_entries(
     compress: Optional[str] = None,
     template: Optional[str] = None,
     datatype: Optional[arf.DataTypes] = arf.DataTypes.UNDEFINED,
-    **metadata,
+    attrs: Optional[dict] = None,
+    **options,
 ) -> None:
     """
     Add data to a file. This is a general-purpose function that will
     iterate through the entries in the source files (or groups of
     files) and add the data to the target file.  The source data can
     be in any file format understood by io.open.
-
-    Additional keyword arguments specify metadata on the newly created
-    entries.
     """
     chan = "pcm"  # only pcm data can be imported
 
     if len(files) == 0:
         raise ValueError("must specify one or more input files")
 
+    if attrs is None:
+        attrs = {}
     with arf.open_file(tgt, "a") as arfp:
         arf.check_file_version(arfp)
         arf.set_attributes(
@@ -262,7 +264,7 @@ def add_entries(
                     entry_name,
                     timestamp,
                     entry_creator="org.meliza.arfx/arfx " + __version__,
-                    **metadata,
+                    **attrs,
                 )
                 arf.create_dataset(
                     entry,
@@ -310,10 +312,10 @@ def extract_entries(
     """
     src = Path(src)
     if not src.is_file():
-        raise IOError(f"the file {src} does not exist")
+        raise FileNotFoundError(f"the file {src} does not exist")
     tgt_dir = Path(".") if tgt_dir is None else Path(tgt_dir)
     if not tgt_dir.is_dir():
-        raise IOError(f"the target directory {tgt_dir} does not exist")
+        raise FileNotFoundError(f"the target directory {tgt_dir} does not exist")
 
     with arf.open_file(src, "r") as arfp:
         try:
@@ -359,7 +361,7 @@ def delete_entries(src: Union[Path, str], entries: Iterable[str], *, repack: boo
     """
     src = Path(src)
     if not src.is_file():
-        raise IOError(f"the file {src} does not exist")
+        raise FileNotFoundError(f"the file {src} does not exist")
 
     count = 0
     with arf.open_file(src, "r+") as arfp:
@@ -433,7 +435,7 @@ def list_entries(
              that are in this list (more verbosely)
     """
     if not os.path.exists(src):
-        raise IOError(f"the file {src} does not exist")
+        raise FileNotFoundError(f"the file {src} does not exist")
     print(f"{src}:")
     with arf.open_file(src, "r") as arfp:
         try:
@@ -465,7 +467,7 @@ def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, 
     """
     src = Path(src)
     if not src.is_file():
-        raise IOError(f"the file {src} does not exist")
+        raise FileNotFoundError(f"the file {src} does not exist")
 
     with arf.open_file(src, "r+") as arfp:
         try:
@@ -486,7 +488,7 @@ def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, 
                     print("^^^^^^^^^^")
 
 
-def write_toplevel_attribute(tgt, files, **options):
+def write_toplevel_attribute(tgt: Union[Path, str], files: Iterable[Union[Path, str]], **options) -> None:
     """Store contents of files as text in top-level attribute with basename of each file"""
     with arf.open_file(tgt, "a") as arfp:
         try:
@@ -494,54 +496,53 @@ def write_toplevel_attribute(tgt, files, **options):
         except Warning as e:
             log.warning("warning: %s", e)
         for fname in files:
-            attrname = "user_%s" % os.path.basename(fname)
-            print("%s -> %s/%s" % (fname, tgt, attrname))
-            textfp = open(fname, "rt")
-            data = textfp.read()
-            arfp.attrs[attrname] = data
-            textfp.close()
+            fname = Path(fname)
+            attrname = f"user_{fname.name}"
+            print(f"{fname} -> {tgt}/{attrname}")
+            arfp.attrs[attrname] = fname.read_text()
 
 
-def read_toplevel_attribute(src, attrnames, **options):
+def read_toplevel_attribute(src: Union[Path, str], attrnames: Iterable[str], **options) -> None:
     """Print text data stored in top-level attributes by write_toplevel_attribute()"""
-    if not os.path.exists(src):
-        raise IOError("the file %s does not exist" % src)
     with arf.open_file(src, "r") as arfp:
         try:
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
         for attrname in attrnames:
-            aname = "user_%s" % attrname
-            if aname in arfp.attrs:
-                data = arfp.attrs[aname]
-                print(data)
-            else:
-                print("no such attribute %s" % aname)
+            aname = f"user_{attrname}"
+            print(f"{aname}:")
+            try:
+                print(arfp.attrs[aname])
+            except KeyError:
+                print(" - no such attribute")
 
 
-def repack_file(path, **options):
-    """Call h5repack on a list of files to repack them"""
-    from shutil import copy, rmtree
-    from subprocess import call
-    from tempfile import mkdtemp
-
+def repack_file(src: Union[Path, str], *, compress: Optional[int] = None, **options) -> None:
+    """Call h5repack on a file"""
+    src_path = Path(src)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"Source file not found: {src_path}")
     cmd = ["/usr/bin/env", "h5repack"]
-    compress = options.get("compress", False)
-    if compress:
+    if compress is not None:
         cmd.extend(("-f", "SHUF", "-f", "GZIP=%d" % compress))
-    try:
-        tdir = mkdtemp()
-        log.info("Repacking %s", path)
-        _fdir, fbase = os.path.split(path)
-        retcode = call([*cmd, path, os.path.join(tdir, fbase)])
-        if retcode == 0:
-            copy(os.path.join(tdir, fbase), path)
-        else:
-            log.error("Failed to repack file: keeping original.")
-    finally:
-        rmtree(tdir)
-
+    with TemporaryDirectory() as temp_dir:
+        tgt_file = Path(temp_dir) / src_path.name
+        try:
+            result = subprocess.run(
+                [*cmd, str(src_path), str(tgt_file)],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if result.returncode == 0:
+                log.info("Repacked %s", src_path)
+                shutil.copy2(tgt_file, src_path)
+            else:
+                log.error("Failed to repack %s, keeping original. Error: %s", src_path, result.stderr.strip())
+        except subprocess.SubprocessError as e:
+            log.exception("Error executing h5repack command: %s", e)
+            
 
 class ParseKeyVal(argparse.Action):
     def __call__(self, parser, namespace, arg, option_string=None):
@@ -556,16 +557,18 @@ class ParseKeyVal(argparse.Action):
         setattr(namespace, self.dest, kv)
 
 
-# FIXME    
-class ParseDataType(argparse.Action):
-    def __call__(self, parser, namespace, arg, option_string=None):
-        if not arg.isdigit():
-            argx = arf.DataTypes._fromstring(arg)
-            if argx is None:
-                raise ValueError("'%s' is not a valid data type" % arg)
-        else:
-            argx = arg
-        setattr(namespace, self.dest, int(argx))
+# class ParseDataType(argparse.Action):
+#     def __call__(self, parser, namespace, arg, option_string=None):
+#         try:
+#             if arg.isdigit():
+#                 argx = 
+#         if not arg.isdigit():
+#             argx = arf.DataTypes._fromstring(arg)
+#             if argx is None:
+#                 raise ValueError("'%s' is not a valid data type" % arg)
+#         else:
+#             argx = arg
+#         setattr(namespace, self.dest, int(argx))
 
 
 def setup_log(log, debug=False):
@@ -703,10 +706,11 @@ def arfx():
     g.add_argument(
         "-T",
         help="specify data type (see --help-datatypes)",
+        type=arf.DataTypes,
         default=arf.DataTypes.UNDEFINED,
         metavar="DATATYPE",
         dest="datatype",
-        action=ParseDataType,
+        #action=ParseDataType,
     )
     g.add_argument(
         "-k",
@@ -740,6 +744,7 @@ def arfx():
         print("[arfx] error: %s" % e)
         if isinstance(e, DeprecationWarning):
             print("      use arfx-migrate to convert to version %s" % arf.spec_version)
+        raise e
         sys.exit(-1)
     return 0
 

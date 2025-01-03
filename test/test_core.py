@@ -111,6 +111,18 @@ def test_add_entries(src_wav_files, tmp_path):
             assert np.all(d[:] == dset["data"])
 
 
+def test_add_entries_with_metadata(src_wav_files, tmp_path):
+    tgt_file = tmp_path / "output.arf"
+    core.add_entries(tgt_file, src_wav_files, datatype=arf.DataTypes.ACOUSTIC, attrs= {"my_attr": "test_value"})
+    with arf.open_file(tgt_file, "r") as fp:
+        assert len(fp) == 3
+        for dset, entry in zip(datasets, fp.values()):
+            assert Path(entry.name).name == dset["name"]
+            assert entry.attrs["my_attr"] == "test_value"
+            d = entry["pcm"]  # data always stored as pcm
+            assert d.attrs["datatype"] == arf.DataTypes.ACOUSTIC
+            
+
 def test_add_entries_with_template(src_wav_files, tmp_path):
     tgt_file = tmp_path / "output.arf"
     core.add_entries(tgt_file, src_wav_files, template="entry")
@@ -239,7 +251,7 @@ def test_copy_nonexistent_things(src_arf_file, tmp_path):
 
 
 def test_list_non_existent_file(tmp_path):
-    with pytest.raises(IOError):
+    with pytest.raises(FileNotFoundError):
         core.list_entries(tmp_path / "no_such_file.arf")
 
 
@@ -251,3 +263,18 @@ def test_list_all_entries(src_arf_file):
 def test_list_an_entry(src_arf_file):
     # doesn't test the actual output, just make sure the function runs
     core.list_entries(src_arf_file, ["entry"])
+
+
+def test_toplevel_attributes(src_arf_file, tmp_path):
+    test_text = "abracadabra"
+    tmp_text = tmp_path / "my_text.txt"
+    tmp_text.write_text(test_text)
+    core.write_toplevel_attribute(src_arf_file, [tmp_text])
+    with arf.open_file(src_arf_file, "r") as fp:
+        assert fp.attrs[f"user_{tmp_text.name}"] == test_text
+    # just test that the read function works
+    core.read_toplevel_attribute(src_arf_file, ["my_text.txt"])
+
+def test_repack_nonexistent_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        core.repack_file(tmp_path / "no_such_file.arf")
