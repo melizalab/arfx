@@ -38,14 +38,14 @@ def open(filename: Union[str, Path], *args, **kwargs):
         cls = ep.load()
         return cls(filename, *args, **kwargs)
     except ValueError:
-        raise ValueError(f"No handler defined for files of type '{ext}'")
+        raise ValueError(f"No handler defined for files of type '{ext}'") from None
     except TypeError:
         # shim for python < 3.10
         for ep in entry_points().get(_entrypoint, []):
             if ep.name == ext:
                 cls = ep.load()
                 return cls(filename, *args, **kwargs)
-        raise ValueError(f"No handler defined for files of type '{ext}'")
+        raise ValueError(f"No handler defined for files of type '{ext}'") from None
 
 
 def list_plugins() -> str:

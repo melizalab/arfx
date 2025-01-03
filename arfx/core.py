@@ -19,14 +19,13 @@ arfx:      general-purpose compression/extraction utility with tar-like syntax
 import argparse
 import logging
 import os
-import sys
 import shutil
 import subprocess
 from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
-from typing import Optional, Union
 from tempfile import TemporaryDirectory
+from typing import Optional, Tuple, Union
 
 import arf
 import h5py as h5
@@ -87,7 +86,7 @@ def entry_repr(entry: h5.Group) -> str:
     return out
 
 
-def dataset_properties(dset: h5.Dataset) -> tuple[str, str, int]:
+def dataset_properties(dset: h5.Dataset) -> Tuple[str, str, int]:
     """Infers the type of data and some properties of an hdf5 dataset.
 
     Returns tuple: (sampled|event|interval|unknown), (array|table|vlarry), ncol
@@ -352,12 +351,14 @@ def extract_entries(
                     log.debug("%s -> %s", dset.name, fname)
 
 
-def delete_entries(src: Union[Path, str], entries: Iterable[str], *, repack: bool = True, **options):
+def delete_entries(
+    src: Union[Path, str], entries: Iterable[str], *, repack: bool = False, **options
+):
     """
     Delete one or more entries from a file.
 
     entries: list of the entries to delete
-    repack: if True (default), repack the file afterward to reclaim space
+    repack: if True, repack the file afterward to reclaim space
     """
     src = Path(src)
     if not src.is_file():
@@ -456,7 +457,13 @@ def list_entries(
                     print(entry_repr(arfp[ename]))
 
 
-def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, verbose: bool = False, **metadata):
+def update_entries(
+    src: Union[Path, str],
+    entries: Optional[Container[str]],
+    *,
+    verbose: bool = False,
+    **metadata,
+):
     """
     Update metadata on one or more entries.
 
@@ -472,7 +479,7 @@ def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, 
             arf.check_file_version(arfp)
         except Warning as e:
             log.warning("warning: %s", e)
-        for i, entry_name in enumerate(arfp):
+        for entry_name in arfp:
             entry_name = PurePosixPath(entry_name).name
             if entries is None or entry_name in entries:
                 enode = arfp[entry_name]
@@ -486,7 +493,9 @@ def update_entries(src: Union[Path, str], entries: Optional[Container[str]], *, 
                     print("^^^^^^^^^^")
 
 
-def write_toplevel_attribute(tgt: Union[Path, str], files: Iterable[Union[Path, str]], **options) -> None:
+def write_toplevel_attribute(
+    tgt: Union[Path, str], files: Iterable[Union[Path, str]], **options
+) -> None:
     """Store contents of files as text in top-level attribute with basename of each file"""
     with arf.open_file(tgt, "a") as arfp:
         try:
@@ -500,7 +509,9 @@ def write_toplevel_attribute(tgt: Union[Path, str], files: Iterable[Union[Path, 
             arfp.attrs[attrname] = fname.read_text()
 
 
-def read_toplevel_attribute(src: Union[Path, str], attrnames: Iterable[str], **options) -> None:
+def read_toplevel_attribute(
+    src: Union[Path, str], attrnames: Iterable[str], **options
+) -> None:
     """Print text data stored in top-level attributes by write_toplevel_attribute()"""
     with arf.open_file(src, "r") as arfp:
         try:
@@ -516,7 +527,9 @@ def read_toplevel_attribute(src: Union[Path, str], attrnames: Iterable[str], **o
                 print(" - no such attribute")
 
 
-def repack_file(src: Union[Path, str], *, compress: Optional[int] = None, **options) -> None:
+def repack_file(
+    src: Union[Path, str], *, compress: Optional[int] = None, **options
+) -> None:
     """Call h5repack on a file"""
     src_path = Path(src)
     if not src_path.is_file():
@@ -531,16 +544,20 @@ def repack_file(src: Union[Path, str], *, compress: Optional[int] = None, **opti
                 [*cmd, str(src_path), str(tgt_file)],
                 capture_output=True,
                 text=True,
-                check=False
+                check=False,
             )
             if result.returncode == 0:
                 log.info("Repacked %s", src_path)
                 shutil.copy2(tgt_file, src_path)
             else:
-                log.error("Failed to repack %s, keeping original. Error: %s", src_path, result.stderr.strip())
+                log.error(
+                    "Failed to repack %s, keeping original. Error: %s",
+                    src_path,
+                    result.stderr.strip(),
+                )
         except subprocess.SubprocessError as e:
             log.exception("Error executing h5repack command: %s", e)
-            
+
 
 class ParseKeyVal(argparse.Action):
     def __call__(self, parser, namespace, arg, option_string=None):
@@ -560,7 +577,7 @@ class ParseDataType(argparse.Action):
         if arg.isdigit():
             setattr(namespace, self.dest, arf.DataTypes(int(arg)))
         else:
-            setattr(namespace, self.dest, arf.DataTypes[arg])        
+            setattr(namespace, self.dest, arf.DataTypes[arg])
 
 
 def setup_log(log, debug=False):
@@ -712,8 +729,8 @@ def arfx(argv=None):
     )
     g.add_argument(
         "-P",
-        help="don't repack when deleting entries",
-        action="store_false",
+        help="repack when deleting entries",
+        action="store_true",
         dest="repack",
     )
     g.add_argument(
@@ -723,7 +740,11 @@ def arfx(argv=None):
         default=1,
         dest="compress",
     )
-    g.add_argument("--directory", help="when extracting files, store them in this directory", type=Path)
+    g.add_argument(
+        "--directory",
+        help="when extracting files, store them in this directory",
+        type=Path,
+    )
 
     args = p.parse_args(argv)
     setup_log(log, args.verbose)

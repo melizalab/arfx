@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
+import sys
 import time
 from pathlib import Path
 
@@ -113,7 +114,12 @@ def test_add_entries(src_wav_files, tmp_path):
 
 def test_add_entries_with_metadata(src_wav_files, tmp_path):
     tgt_file = tmp_path / "output.arf"
-    core.add_entries(tgt_file, src_wav_files, datatype=arf.DataTypes.ACOUSTIC, attrs= {"my_attr": "test_value"})
+    core.add_entries(
+        tgt_file,
+        src_wav_files,
+        datatype=arf.DataTypes.ACOUSTIC,
+        attrs={"my_attr": "test_value"},
+    )
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
         for dset, entry in zip(datasets, fp.values()):
@@ -121,7 +127,7 @@ def test_add_entries_with_metadata(src_wav_files, tmp_path):
             assert entry.attrs["my_attr"] == "test_value"
             d = entry["pcm"]  # data always stored as pcm
             assert d.attrs["datatype"] == arf.DataTypes.ACOUSTIC
-            
+
 
 def test_add_entries_with_template(src_wav_files, tmp_path):
     tgt_file = tmp_path / "output.arf"
@@ -138,7 +144,16 @@ def test_add_entries_with_template(src_wav_files, tmp_path):
 def test_script_add_entries(src_wav_files, tmp_path):
     tgt_file = tmp_path / "output.arf"
     src_wav_files = [str(path) for path in src_wav_files]
-    argv = ["-cvf", str(tgt_file), "-T", "ACOUSTIC", "-k", "this=that", "-z 9", *src_wav_files]
+    argv = [
+        "-cvf",
+        str(tgt_file),
+        "-T",
+        "ACOUSTIC",
+        "-k",
+        "this=that",
+        "-z 9",
+        *src_wav_files,
+    ]
     core.arfx(argv)
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
@@ -149,7 +164,7 @@ def test_script_add_entries(src_wav_files, tmp_path):
             assert d.shape == dset["data"].shape
             assert np.all(d[:] == dset["data"])
 
-            
+
 def test_extract_entries(src_arf_file, tmp_path):
     core.extract_entries(src_arf_file, directory=tmp_path)
     # only the sampled data can be extracted
@@ -177,7 +192,7 @@ def test_extract_entries_with_template(src_arf_file, tmp_path):
             assert data.shape == dset["data"].shape
             assert np.all(data == dset["data"])
 
-            
+
 def test_extract_entry(src_arf_file, tmp_path):
     core.extract_entries(src_arf_file, ["entry"], directory=tmp_path)
     # only the sampled data can be extracted
@@ -196,7 +211,7 @@ def test_extract_nonexistent_entry(src_arf_file, tmp_path):
     for dset in datasets[:3]:
         tgt_file = tmp_path / f"entry_{dset['name']}.wav"
         assert not tgt_file.exists()
-    
+
 
 def test_script_extract_entries(src_arf_file, tmp_path):
     argv = ["-xvf", str(src_arf_file), "--directory", str(tmp_path)]
@@ -210,7 +225,7 @@ def test_script_extract_entries(src_arf_file, tmp_path):
             assert data.shape == dset["data"].shape
             assert np.all(data == dset["data"])
 
-        
+
 def test_delete_entry(src_arf_file):
     core.delete_entries(src_arf_file, ["entry"])
     with arf.open_file(src_arf_file, "r") as fp:
@@ -222,13 +237,13 @@ def test_delete_nonexistent_entry(src_arf_file):
     with arf.open_file(src_arf_file, "r") as fp:
         assert "entry" in fp
 
-        
+
 def test_update_all_entries(src_arf_file):
     core.update_entries(src_arf_file, None, my_attr="test_value")
     with arf.open_file(src_arf_file, "r") as fp:
         assert fp["entry"].attrs["my_attr"] == "test_value"
 
-        
+
 def test_update_entry(src_arf_file):
     core.update_entries(src_arf_file, ["entry"], my_attr="test_value")
     with arf.open_file(src_arf_file, "r") as fp:
@@ -239,7 +254,7 @@ def test_update_nonexistent_entry(src_arf_file):
     core.update_entries(src_arf_file, ["no_such_entry"], my_attr="test_value")
     with arf.open_file(src_arf_file, "r") as fp:
         assert "my_attr" not in fp["entry"].attrs
-        
+
 
 def test_copy_file(src_arf_file, tmp_path):
     tgt_file = tmp_path / "output.arf"
@@ -323,8 +338,12 @@ def test_toplevel_attributes(src_arf_file, tmp_path):
     # just test that the read function works
     core.read_toplevel_attribute(src_arf_file, ["my_text.txt"])
 
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Test does not run on Windows")
+def test_repack(src_arf_file):
+    core.repack_file(src_arf_file, compress=9)
+
+
 def test_repack_nonexistent_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         core.repack_file(tmp_path / "no_such_file.arf")
-
-
