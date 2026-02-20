@@ -1,13 +1,16 @@
 name: Build and publish distribution to pypi
+on:
+  push:
+    branches:
+      - master
 
-on: push
 jobs:
   build:
     name: Build distribution
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set version suffix for TestPyPI
         id: set_version
         run: |
@@ -17,14 +20,14 @@ jobs:
             sed -i -e "s/^version = \"${VERSION}\"/version = \"${VERSION}.dev${BUILD_NUM}\"/" pyproject.toml
           fi
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           version: "latest"
       - name: Build wheels
         run: uv build
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: python-package-distributions
           path: dist/
@@ -44,7 +47,7 @@ jobs:
 
     steps:
     - name: Download all the dists
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: python-package-distributions
         path: dist/
@@ -65,12 +68,12 @@ jobs:
 
     steps:
     - name: Download all the dists
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: python-package-distributions
         path: dist/
     - name: Sign the dists with Sigstore
-      uses: sigstore/gh-action-sigstore-python@v3.0.0
+      uses: sigstore/gh-action-sigstore-python@v3.2.0
       with:
         inputs: >-
           ./dist/*.tar.gz
@@ -110,7 +113,7 @@ jobs:
 
     steps:
     - name: Download all the dists
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: python-package-distributions
         path: dist/
