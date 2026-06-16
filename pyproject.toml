@@ -85,6 +85,10 @@ select = [
     "F",  # pyflakes
     "I",  # isort
     "B",  # flake8-bugbear
+    "I",   # isort
+    "PGH", # pygrep-hooks
+    "RUF", # Ruff-specific
+    "UP",  # pyupgrade
 ]
 ignore = ["E221", "E501", "E701"]
 

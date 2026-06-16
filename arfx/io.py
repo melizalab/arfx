@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Provides read and write access to data for import/export to ARF. This is based
@@ -10,12 +9,11 @@ Created 2011-09-19
 
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Optional, Type, Union
 
 _entrypoint = "arfx.io"
 
 
-def open(filename: Union[str, Path], *args, **kwargs):
+def open(filename: str | Path, *args, **kwargs):
     """Open a file and return an appropriate object, based on extension.
 
     The handler class is dynamically dispatched using Python's entry points system.
@@ -84,7 +82,7 @@ def extended_shape(shape1, shape2):
             )
 
 
-def _get_handler_class(extension: str) -> Optional[Type]:
+def _get_handler_class(extension: str) -> type | None:
     """Get the (first) handler class for a given file extension.
 
     Args:

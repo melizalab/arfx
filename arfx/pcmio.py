@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Read and write raw binary format files
@@ -96,19 +95,7 @@ class pcmfile:
         return self._dtype
 
     def __repr__(self):
-        return (
-            "<open %s.%s %s, mode='%s', dtype='%s', channels=%d, sampling rate %d at %s>"
-            % (
-                self.__class__.__module__,
-                self.__class__.__name__,
-                self.filename,
-                self.mode,
-                self.dtype,
-                self.nchannels,
-                self.sampling_rate,
-                hex(id(self)),
-            )
-        )
+        return f"<open {self.__class__.__module__}.{self.__class__.name__} {self.filename}, mode='{self.mode}', dtype='{self.dtype}', channels={self.nchannels}, sampling rate {self.sampling_rate} at {hex(id(self))}>"
 
     def flush(self):
         """flush data to disk"""
@@ -133,7 +120,7 @@ class pcmfile:
         from numpy import memmap as mmap
 
         if self.mode == "w":
-            raise IOError("file is write-only")
+            raise OSError("file is write-only")
         if self.mode in ("r+", "w+"):
             self.fp.flush()
         # find offset
@@ -179,7 +166,7 @@ class pcmfile:
         from numpy import asarray
 
         if self.mode == "r":
-            raise IOError("file is read-only")
+            raise OSError("file is read-only")
 
         if scale:
             data = rescale(data, self._dtype)

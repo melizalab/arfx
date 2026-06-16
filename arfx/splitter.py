@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """This script collects data from a recording, possibly made over multiple ARF
 files and splits it into chunks in a new file. Each new entry is
@@ -14,8 +13,8 @@ import datetime
 import itertools
 import logging
 import operator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Iterator, Sequence, Tuple
 
 import arf
 import h5py as h5
@@ -26,7 +25,7 @@ log = logging.getLogger("arfx-split")  # root logger
 
 def entry_timestamps(
     arf_file: h5.Group,
-) -> Iterator[Tuple[h5.Group, datetime.datetime]]:
+) -> Iterator[tuple[h5.Group, datetime.datetime]]:
     """Iterate through entries in arf file, yielding a seq of (entry, timestamp) tuples"""
     for _entry_name, entry in arf_file.items():
         if not isinstance(entry, h5.Group):

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Specialized script to select and extract specific time segments into a new arf file.
@@ -85,7 +84,7 @@ def main(argv=None):
                 entry_name = interval["entry"]
             src_entry = src[entry_name]
             src_entry_attrs = dict(src_entry.attrs)
-            tgt_entry_name = "entry_%05d" % tgt_entry_index
+            tgt_entry_name = f"entry_{tgt_entry_index:05d}"
             log.info(
                 " - %s: [%s, %s) -> %s",
                 entry_name,

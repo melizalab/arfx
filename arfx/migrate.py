@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Convert old ARF formats to the current one.
@@ -6,8 +5,6 @@ Convert old ARF formats to the current one.
 Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-04-06
 """
-
-from __future__ import absolute_import, division, unicode_literals
 
 import logging
 from distutils.version import StrictVersion
@@ -191,7 +188,7 @@ def cvt_11_20(afp, **kwargs):
                 and "sampling_rate" not in dset.attrs
             ):
                 if sampling_rate is None:
-                    raise ValueError("need sampling rate for %s" % dset.name)
+                    raise ValueError(f"need sampling rate for {dset.name}")
                 log.info("Adding sampling rate to %s", dname)
                 dset.attrs["sampling_rate"] = float(sampling_rate)
 
@@ -242,7 +239,7 @@ def migrate_script(argv=None):
 
     p = argparse.ArgumentParser(
         prog="arfx-migrate",
-        description="migrate older ARF files to %s spec" % arf.spec_version,
+        description=f"migrate older ARF files to {arf.spec_version} spec",
     )
     p.add_argument("--version", action="version", version="%(prog)s " + __version__)
     p.add_argument("-v", help="verbose output", action="store_true", dest="verbose")

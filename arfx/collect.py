@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Specialized script to collect data across channels and entries
@@ -186,7 +185,7 @@ def collect_sampled_script(argv=None):
     setup_log(log, args.verbose)
 
     if args.channel_file is not None:
-        with open(args.channel_file, "rt") as fp:
+        with open(args.channel_file) as fp:
             if args.channels is None:
                 args.channels = []
             for line in fp:
@@ -221,7 +220,7 @@ def collect_sampled_script(argv=None):
             path = os.path.join(os.path.dirname(args.outfile), "params.json")
             log.info("writing mountainlab metadata to '%s'", path)
             data = {"samplerate": int(sampling_rate), "spike_sign": -1}
-            with open(path, "wt") as jfp:
+            with open(path, "w") as jfp:
                 json.dump(data, jfp)
         log.info("opening '%s' for output", args.outfile)
         log.info(" - sampling rate = %f", sampling_rate)

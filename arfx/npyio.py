@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """Read and write numpy files
 
@@ -54,7 +53,7 @@ class npyfile:
 
     def read(self, mmap_mode=None):
         if self.mode != "r":
-            raise IOError("attempted to read from a file opened in write mode")
+            raise OSError("attempted to read from a file opened in write mode")
         return self.data
 
     def write(self, data):
@@ -70,7 +69,7 @@ class npyfile:
         if isfortran(data):
             raise ValueError("data must be C-contiguous (row-major order)")
         if self.mode != "w":
-            raise IOError("attempted to write to file opened in read-only mode")
+            raise OSError("attempted to write to file opened in read-only mode")
         if self.fp.seek(0, 2) == 0:
             # empty file
             self._write_descr = header_data_from_array_1_0(data)
@@ -106,7 +105,7 @@ class npyfile:
         try:
             header_prefix = npf.magic(*version) + struct.pack(fmt, hlen + padlen)
         except struct.error as err:
-            msg = "Header length {} too big for version={}".format(hlen, version)
+            msg = f"Header length {hlen} too big for version={version}"
             raise ValueError(msg) from err
         self.fp.seek(0)
         self.fp.write(header_prefix)

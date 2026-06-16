@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 arfx is a tool for copying data to and from ARF files. It is intended for simple

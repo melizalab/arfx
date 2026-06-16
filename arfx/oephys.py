@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """Script for converting open-ephys data in the raw binary format to ARF
 
@@ -19,13 +18,13 @@ from arfx import core
 log = logging.getLogger("arfx-oephys")
 
 
-class dataset(object):
+class dataset:
     def __init__(self, base, structure):
         self.attrs = dict(**structure)
         self.name = self.attrs["folder_name"].strip("/").replace("/", "_")
 
     def __repr__(self):
-        return "<open-ephys dataset '/%s'>" % self.name
+        return f"<open-ephys dataset '/{self.name}'>"
 
 
 class continuous_dset(dataset):
@@ -64,7 +63,7 @@ class continuous_dset(dataset):
             sample_offset = find_sync_time(base, processor, idx, subidx)
             if sample_offset is None:
                 raise RuntimeError(
-                    "unable to determine sync time for %s dataset" % self.name
+                    f"unable to determine sync time for {self.name} dataset"
                 ) from err
 
         self.offset = sample_offset / self.sampling_rate
@@ -75,9 +74,8 @@ class continuous_dset(dataset):
         size = self.fp.tell() // self.dtype.itemsize
         self.fp.seek(0, 0)
         if size % self.nchannels != 0:
-            raise IOError(
-                "size of file '%s' (%d) is not a multiple of the channel count (%d)"
-                % (datfile, size, self.nchannels)
+            raise OSError(
+                f"size of file '{datfile}' ({size:d}) is not a multiple of the channel count ({self.nchannels})"
             )
         self.nsamples = size // self.nchannels
         log.debug(
@@ -135,7 +133,7 @@ class event_dset(dataset):
             self.units = ("samples", "")
         else:
             raise NotImplementedError(
-                "%s type event datasets not supported" % structure["type"]
+                f"{structure['type']} type event datasets not supported"
             )
         log.debug(
             "- %s: array %s @ %.1f/s (compound type)",
@@ -149,7 +147,7 @@ class event_dset(dataset):
         return self.data.size
 
 
-class recording(object):
+class recording:
     """Represents the contents of a single open-ephys recording session.
 
     Each recording session (`experimentN/recordingM`) in the open-ephys
@@ -165,7 +163,7 @@ class recording(object):
         self.attrs = {}
         self.datasets = {}
 
-        with open(os.path.join(path, "structure.oebin"), "r") as fp:
+        with open(os.path.join(path, "structure.oebin")) as fp:
             structure = json.load(fp)
 
         for processor in structure.pop("continuous", ()):
@@ -198,7 +196,7 @@ def find_sync_time(path, processor, id, subid):
     rx = re.compile(
         r"Processor: (?P<processor>.+?) Id: (?P<id>\d+?) subProcessor: (?P<subid>\d+?) start time: (?P<start>\d+)"
     )
-    with open(os.path.join(path, "sync_messages.txt"), "r") as fp:
+    with open(os.path.join(path, "sync_messages.txt")) as fp:
         for line in fp:
             match = rx.match(line)
             if match is None:

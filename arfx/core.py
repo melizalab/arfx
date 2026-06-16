@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Code for moving data in and out of arf containers.  There are some
@@ -22,10 +21,10 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Container, Iterable, Sequence
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from typing import Container, Iterable, Optional, Sequence, Tuple, Union
 
 import arf
 import h5py as h5
@@ -48,9 +47,8 @@ def entry_repr(entry: h5.Group) -> str:
         if k.isupper():
             continue
         if k == "timestamp":
-            out += "\n  timestamp : %s" % arf.timestamp_to_datetime(v).strftime(
-                "%Y-%m-%d %H:%M:%S.%f"
-            )
+            ts = arf.timestamp_to_datetime(v).strftime("%Y-%m-%d %H:%M:%S.%f")
+            out += f"\n  timestamp : {ts}"
         else:
             out += f"\n  {k} : {v}"
     for name, dset in entry.items():
@@ -86,7 +84,7 @@ def entry_repr(entry: h5.Group) -> str:
     return out
 
 
-def dataset_properties(dset: h5.Dataset) -> Tuple[str, str, int]:
+def dataset_properties(dset: h5.Dataset) -> tuple[str, str, int]:
     """Infers the type of data and some properties of an hdf5 dataset.
 
     Returns tuple: (sampled|event|interval|unknown), (array|table|vlarry), ncol
@@ -128,7 +126,7 @@ def pluralize(n: int, sing: str = "", plurl: str = "s") -> str:
 
 
 def parse_name_template(
-    node: Union[h5.Group, h5.Dataset],
+    node: h5.Group | h5.Dataset,
     template: str,
     index: int = 0,
     default: str = "NA",
@@ -187,7 +185,7 @@ def parse_name_template(
         raise ValueError(f"template error: {e.message}") from e
 
 
-def iter_entries(src: Union[Path, str], cbase: str = "pcm"):
+def iter_entries(src: Path | str, cbase: str = "pcm"):
     """Iterate through the entries and channels of a data source.
 
     Yields (data, entry index, entry name,)
@@ -210,13 +208,13 @@ def iter_entries(src: Union[Path, str], cbase: str = "pcm"):
 
 
 def add_entries(
-    tgt: Union[Path, str],
-    files: Sequence[Union[Path, str]],
+    tgt: Path | str,
+    files: Sequence[Path | str],
     *,
-    compress: Optional[str] = None,
-    template: Optional[str] = None,
-    datatype: Optional[arf.DataTypes] = arf.DataTypes.UNDEFINED,
-    attrs: Optional[dict] = None,
+    compress: str | None = None,
+    template: str | None = None,
+    datatype: arf.DataTypes | None = arf.DataTypes.UNDEFINED,
+    attrs: dict | None = None,
     **options,
 ) -> None:
     """
@@ -280,7 +278,7 @@ def add_entries(
 
 
 def create_and_add_entries(
-    tgt: Union[Path, str], files: Sequence[Union[Path, str]], **options
+    tgt: Path | str, files: Sequence[Path | str], **options
 ) -> None:
     """Add data to a new file. If the file exists it's deleted"""
     tgt = Path(tgt)
@@ -290,12 +288,12 @@ def create_and_add_entries(
 
 
 def extract_entries(
-    src: Union[Path, str],
-    entries: Optional[Container[str]] = None,
+    src: Path | str,
+    entries: Container[str] | None = None,
     *,
-    directory: Union[Path, str, None] = None,
-    channels: Optional[Container[str]] = None,
-    template: Optional[str] = None,
+    directory: Path | str | None = None,
+    channels: Container[str] | None = None,
+    template: str | None = None,
     **options,
 ):
     """
@@ -352,7 +350,7 @@ def extract_entries(
 
 
 def delete_entries(
-    src: Union[Path, str], entries: Iterable[str], *, repack: bool = False, **options
+    src: Path | str, entries: Iterable[str], *, repack: bool = False, **options
 ):
     """
     Delete one or more entries from a file.
@@ -382,9 +380,9 @@ def delete_entries(
 
 
 def copy_entries(
-    tgt: Union[Path, str],
-    files: Iterable[Union[Path, str]],
-    entry_base: Optional[str] = None,
+    tgt: Path | str,
+    files: Iterable[Path | str],
+    entry_base: str | None = None,
     **options,
 ) -> None:
     """
@@ -427,7 +425,7 @@ def copy_entries(
 
 
 def list_entries(
-    src: Union[Path, str], entries: Optional[Iterable[str]] = None, **options
+    src: Path | str, entries: Iterable[str] | None = None, **options
 ) -> None:
     """
     List the contents of the file, optionally restricted to specific entries
@@ -458,8 +456,8 @@ def list_entries(
 
 
 def update_entries(
-    src: Union[Path, str],
-    entries: Optional[Container[str]],
+    src: Path | str,
+    entries: Container[str] | None,
     *,
     verbose: bool = False,
     **metadata,
@@ -494,7 +492,7 @@ def update_entries(
 
 
 def write_toplevel_attribute(
-    tgt: Union[Path, str], files: Iterable[Union[Path, str]], **options
+    tgt: Path | str, files: Iterable[Path | str], **options
 ) -> None:
     """Store contents of files as text in top-level attribute with basename of each file"""
     with arf.open_file(tgt, "a") as arfp:
@@ -510,7 +508,7 @@ def write_toplevel_attribute(
 
 
 def read_toplevel_attribute(
-    src: Union[Path, str], attrnames: Iterable[str], **options
+    src: Path | str, attrnames: Iterable[str], **options
 ) -> None:
     """Print text data stored in top-level attributes by write_toplevel_attribute()"""
     with arf.open_file(src, "r") as arfp:
@@ -527,16 +525,14 @@ def read_toplevel_attribute(
                 print(" - no such attribute")
 
 
-def repack_file(
-    src: Union[Path, str], *, compress: Optional[int] = None, **options
-) -> None:
+def repack_file(src: Path | str, *, compress: int | None = None, **options) -> None:
     """Call h5repack on a file"""
     src_path = Path(src)
     if not src_path.is_file():
         raise FileNotFoundError(f"Source file not found: {src_path}")
     cmd = ["/usr/bin/env", "h5repack"]
     if compress is not None:
-        cmd.extend(("-f", "SHUF", "-f", "GZIP=%d" % compress))
+        cmd.extend(("-f", "SHUF", "-f", f"GZIP={compress:d}"))
     with TemporaryDirectory() as temp_dir:
         tgt_file = Path(temp_dir) / src_path.name
         try:
@@ -565,7 +561,7 @@ class ParseKeyVal(argparse.Action):
         if kv is None:
             kv = dict()
         if not arg.count("=") == 1:
-            raise ValueError("-k %s argument badly formed; needs key=value" % arg)
+            raise ValueError(f"-k {arg} argument badly formed; needs key=value")
         else:
             key, val = arg.split("=")
             kv[key] = val
@@ -754,8 +750,8 @@ def arfx(argv=None):
         entries = opts.pop("entries") or None
         args.op(args.arffile, entries, **opts)
     except DeprecationWarning as e:
-        print("[arfx] error: %s" % e)
-        print("      use arfx-migrate to convert to version %s" % arf.spec_version)
+        print(f"[arfx] error: {e}")
+        print(f"      use arfx-migrate to convert to version {arf.spec_version}")
         p.exit(-1)
     except (ValueError, FileNotFoundError) as err:
         p.error(f"[arfx] error: {err}")

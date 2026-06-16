@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # -*- mode: python -*-
 """
 Read and write mountainlab binary format files
@@ -119,7 +118,7 @@ class mdafile:
         from numpy import memmap as mmap
 
         if self.mode != "r":
-            raise IOError("attempted to read from a file opened in write mode")
+            raise OSError("attempted to read from a file opened in write mode")
         _header = self._read_header()
         if frames is None:
             frames = self.nframes - offset
@@ -154,7 +153,7 @@ class mdafile:
         if isfortran(data):
             raise ValueError("data must be C-contiguous (row-major order)")
         if self.mode != "w":
-            raise IOError("attempted to write to file opened in read-only mode")
+            raise OSError("attempted to write to file opened in read-only mode")
         if self.fp.seek(0, 2) == 0:
             # empty file
             self._write_header(data.dtype, data.shape)
