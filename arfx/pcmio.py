@@ -6,6 +6,7 @@ Read and write raw binary format files
 Copyright (C) 2012 Dan Meliza <dan // AT // meliza.org>
 Created 2012-03-29
 """
+
 from ewave import rescale
 
 

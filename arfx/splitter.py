@@ -8,6 +8,7 @@ Currently, no effort is made to splice data across entries or files. This may
 result in some short entries. Also, only sampled datasets are processed.
 
 """
+
 import argparse
 import datetime
 import itertools
@@ -67,7 +68,6 @@ def pad_log_messages(dset: np.ndarray) -> np.ndarray:
 
 
 def main(argv=None):
-
     from .core import __version__, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-split", description=__doc__)

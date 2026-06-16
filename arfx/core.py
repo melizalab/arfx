@@ -16,6 +16,7 @@ Scripts
 =====================
 arfx:      general-purpose compression/extraction utility with tar-like syntax
 """
+
 import argparse
 import logging
 import os

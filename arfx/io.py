@@ -7,6 +7,7 @@ on a plugin architecture.
 Copyright (C) 2011 Daniel Meliza <dmeliza@dylan.uchicago.edu>
 Created 2011-09-19
 """
+
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Optional, Type, Union

@@ -5,6 +5,7 @@ Specialized script to collect data across channels and entries
 
 Copyright (C) 2018 Dan Meliza <dan // AT // meliza.org>
 """
+
 import logging
 import operator
 import os

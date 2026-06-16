@@ -105,7 +105,7 @@ def test_add_entries(src_wav_files, tmp_path):
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
         # iteration is not by creation time in h5py 3.11 (py38)
-        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp), strict=False):
             assert Path(entry_name).name == dset["name"]
             d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
@@ -124,7 +124,7 @@ def test_add_entries_with_metadata(src_wav_files, tmp_path):
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
         # iteration is not by creation time in h5py 3.11 (py38)
-        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp), strict=False):
             assert Path(entry_name).name == dset["name"]
             entry = fp[entry_name]
             assert entry.attrs["my_attr"] == "test_value"
@@ -137,7 +137,7 @@ def test_add_entries_with_template(src_wav_files, tmp_path):
     core.add_entries(tgt_file, src_wav_files, template="entry")
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry_name in zip(datasets, fp):
+        for dset, entry_name in zip(datasets, fp, strict=False):
             d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
             assert d.shape == dset["data"].shape
@@ -160,7 +160,7 @@ def test_script_add_entries(src_wav_files, tmp_path):
     core.arfx(argv)
     with arf.open_file(tgt_file, "r") as fp:
         assert len(fp) == 3
-        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp)):
+        for dset, entry_name in zip(datasets, arf.keys_by_creation(fp), strict=False):
             assert Path(entry_name).name == dset["name"]
             d = fp[entry_name]["pcm"]  # data always stored as pcm
             assert d.attrs["sampling_rate"] == dset["sampling_rate"]
@@ -268,7 +268,7 @@ def test_copy_file(src_arf_file, tmp_path):
         assert len(entry) == len(datasets)
         assert set(entry.keys()) == set(dset["name"] for dset in datasets)
         # this will fail if iteration is not in order of creation
-        for dset, d in zip(datasets, entry.values()):
+        for dset, d in zip(datasets, entry.values(), strict=True):
             assert d.shape == dset["data"].shape
             assert not arf.is_entry(d)
 
@@ -289,7 +289,7 @@ def test_copy_files(src_arf_file, tmp_path):
         assert len(entry) == len(datasets)
         assert set(entry.keys()) == set(dset["name"] for dset in datasets)
         # this will fail if iteration is not in order of creation
-        for dset, d in zip(datasets, entry.values()):
+        for dset, d in zip(datasets, entry.values(), strict=True):
             assert d.shape == dset["data"].shape
             assert not arf.is_entry(d)
 
@@ -303,7 +303,7 @@ def test_copy_entry(src_arf_file, tmp_path):
         assert len(entry) == len(datasets)
         assert set(entry.keys()) == set(dset["name"] for dset in datasets)
         # this will fail if iteration is not in order of creation
-        for dset, d in zip(datasets, entry.values()):
+        for dset, d in zip(datasets, entry.values(), strict=True):
             assert d.shape == dset["data"].shape
             assert not arf.is_entry(d)
 

@@ -6,6 +6,7 @@ This interface is based on the (2020-09-29) specification at
 https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+format
 
 """
+
 import logging
 import os
 import re
@@ -230,7 +231,7 @@ def script(argv=None):
         "--help-datatypes",
         help="print available datatypes and exit",
         action="version",
-        version=core.format_list()
+        version=core.format_list(),
     )
 
     p.add_argument(

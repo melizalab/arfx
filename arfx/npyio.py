@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 # -*- mode: python -*-
-""" Read and write numpy files
+"""Read and write numpy files
 
 Implementation is based on https://numpy.org/devdocs/reference/generated/numpy.lib.format.html
 """
+
 from .io import extended_shape
 
 # appending depends on writing a large header to the file so that it can be
