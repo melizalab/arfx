@@ -7,8 +7,8 @@ https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+for
 """
 
 import logging
-import os
 import re
+from pathlib import Path
 
 import arf
 import numpy as np
@@ -16,6 +16,13 @@ import numpy as np
 from arfx import core
 
 log = logging.getLogger("arfx-oephys")
+
+
+def first_existing(*paths: Path) -> Path | None:
+    """Iterate through a sequence of paths and return the first one that exists, or None if none do"""
+    for path in paths:
+        if path.exists:
+            return Path
 
 
 class dataset:
@@ -30,8 +37,8 @@ class dataset:
 class continuous_dset(dataset):
     """Represents a dataset from a continuous processor (i.e. sampled data)"""
 
-    def __init__(self, base, structure):
-        self.path = os.path.join(base, "continuous", structure["folder_name"])
+    def __init__(self, base: Path, structure: dict):
+        self.path = base / "continuous" / structure["folder_name"]
         self.nchannels = structure.pop("num_channels")
         self.channel_attrs = structure.pop("channels")
         self.sampling_rate = structure.pop("sample_rate")
@@ -43,16 +50,18 @@ class continuous_dset(dataset):
             )
         super().__init__(base, structure)
 
-        # the timestamps.npy file can get deleted during spike sorting, so we
-        # fall back on the sync_messages.txt file
+        # Sample index files:
+        # 0.5.x: 'timestamps.npy'; 0.6.0+: 'sample_numbers.npy'. Try the newer
+        # name first because 'timestamps.npy' is something else in 0.6+.
+        # Also: this file can get deleted during spike sorting, so if both are
+        # missing, we fall back on the sync_messages.txt file
         try:
-            timestamps = np.load(
-                os.path.join(self.path, "timestamps.npy"), mmap_mode="r"
-            )
+            tspath = first_existing(self.path / "sample_numbers.npy", self.path / "timestamps.npy")
+            timestamps = np.load(tspath, mmap_mode="r")
             sample_offset = timestamps[0]
         except FileNotFoundError as err:
             log.warning(
-                "- warning: timestamps.npy file is missing for %s; falling back on sync_messages.txt",
+                "- warning: timestamps.npy/sample_numbers.npy file is missing for %s; falling back on sync_messages.txt",
                 self.name,
             )
             processor, idx, subidx = (
@@ -68,7 +77,7 @@ class continuous_dset(dataset):
 
         self.offset = sample_offset / self.sampling_rate
         self.dtype = np.dtype("int16")
-        datfile = os.path.join(self.path, "continuous.dat")
+        datfile = self.path / "continuous.dat"
         self.fp = open(datfile, "rb")
         self.fp.seek(0, 2)
         size = self.fp.tell() // self.dtype.itemsize
@@ -88,14 +97,14 @@ class continuous_dset(dataset):
         )
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self.nsamples * self.nchannels
 
-    def iter_chunks(self, samples):
+    def iter_chunks(self, nsamples: int):
         """A generator that retrieves the dataset in chunks of nsamples x nchannels"""
         offset = 0
         while True:
-            buf = self.fp.read(samples * self.nchannels * self.dtype.itemsize)
+            buf = self.fp.read(nsamples * self.nchannels * self.dtype.itemsize)
             if len(buf) == 0:
                 return
             data = np.frombuffer(buf, dtype=self.dtype)
@@ -107,28 +116,33 @@ class continuous_dset(dataset):
 class spikes_dset(dataset):
     """Represents a dataset of spike times (not implemented)"""
 
-    def __init__(self, base, structure):
+    def __init__(self, base: Path, structure: dict):
         raise NotImplementedError("spikes datasets not yet supported")
 
 
 class event_dset(dataset):
     """Represents a dataset from an event-type processor (i.e. marked point process)"""
 
-    def __init__(self, base, structure):
+    def __init__(self, base: Path, structure: dict):
         super().__init__(base, structure)
         self.attrs.pop("event_metadata", None)  # metadata is not kept
-        path = os.path.join(base, "events", structure["folder_name"])
-        timestamps = np.load(os.path.join(path, "timestamps.npy"))
-        channels = np.load(os.path.join(path, "channels.npy"))
+        path = base / "events" / structure["folder_name"]
+        # Event times (in samples)
+        # 0.5.x: 'timestamps.npy'
+        # 0.6.0+: 'sample_numbers.npy'
+        tsfile = first_existing(path / "sample_numbers.npy", path / "timestamps.npy")
+        timestamps = np.load(tsfile)
+        # this file doesn't exist in 0.6.0+
+        channels = np.load(path, "channels.npy")
         self.sampling_rate = structure["sample_rate"]
         if structure["type"] == "string":
-            messages = np.load(os.path.join(path, "text.npy"))
+            messages = np.load(path, "text.npy")
             self.data = np.rec.fromarrays(
                 [timestamps, messages, channels], names=("start", "message", "channel")
             )
             self.units = ("samples", "", "")
         elif structure["type"] == "int16":
-            events = np.load(os.path.join(path, "channel_states.npy"))
+            events = np.load(path / "channel_states.npy")
             self.data = np.rec.fromarrays([timestamps, events], names=("start", "ttl"))
             self.units = ("samples", "")
         else:
@@ -143,7 +157,7 @@ class event_dset(dataset):
         )
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self.data.size
 
 
@@ -157,13 +171,13 @@ class recording:
 
     """
 
-    def __init__(self, path):
+    def __init__(self, path: Path):
         import json
 
         self.attrs = {}
         self.datasets = {}
 
-        with open(os.path.join(path, "structure.oebin")) as fp:
+        with open(path / "structure.oebin") as fp:
             structure = json.load(fp)
 
         for processor in structure.pop("continuous", ()):
@@ -190,13 +204,13 @@ class recording:
         self.attrs.update(structure)
 
 
-def find_sync_time(path, processor, id, subid):
+def find_sync_time(path: Path, processor: dict, id: int | str, subid: int | str) -> int:
     """Look up the start time for a processor using the sync_messages.txt file. Returns None if there is no match"""
 
     rx = re.compile(
         r"Processor: (?P<processor>.+?) Id: (?P<id>\d+?) subProcessor: (?P<subid>\d+?) start time: (?P<start>\d+)"
     )
-    with open(os.path.join(path, "sync_messages.txt")) as fp:
+    with open(path / "sync_messages.txt") as fp:
         for line in fp:
             match = rx.match(line)
             if match is None:
@@ -212,7 +226,6 @@ def find_sync_time(path, processor, id, subid):
 def script(argv=None):
     import argparse
     import datetime
-    import glob
     import re
 
     from tqdm import tqdm
@@ -285,7 +298,7 @@ def script(argv=None):
         dest="arffile",
         help="the destination ARF file (new data are appended)",
     )
-    p.add_argument("path", nargs="+", help="the source open-ephys data directories")
+    p.add_argument("path", type=Path, nargs="+", help="the source open-ephys data directories")
 
     args = p.parse_args(argv)
     core.setup_log(log, args.verbose)
@@ -310,10 +323,8 @@ def script(argv=None):
             except (AttributeError, ValueError) as e:
                 log.error("can't parse timestamp from directory name %s: %s", path, e)
                 p.exit(-1)
-            for structfile in glob.iglob(
-                os.path.join(path, "**/structure.oebin"), recursive=True
-            ):
-                dir = os.path.dirname(structfile)
+            for structfile in path.glob("**/structure.oebin", recursive=True):
+                dir = structfile.dirname
                 log.info("Reading from '%s':", dir)
                 rec = recording(dir)
 

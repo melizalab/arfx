@@ -60,7 +60,7 @@ arfx-oephys = "arfx.oephys:script"
 dev = [
     "pytest>=9.0.3",
     "pytest-cov >= 4.1.0",
-    "ruff>=0.7.0"
+    "ruff>=0.14.3",
 ]
 
 [tool.pytest.ini_options]
