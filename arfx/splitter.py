@@ -76,14 +76,14 @@ def main(argv=None):
     p.add_argument(
         "--duration",
         "-T",
-        help="the maximum duration of entries " "(default: %(default).2f seconds)",
+        help="the maximum duration of entries (default: %(default).2f seconds)",
         type=float,
         default=600,
     )
     p.add_argument(
         "--compress",
         "-z",
-        help="set compression level in output file " "(default: %(default)d)",
+        help="set compression level in output file (default: %(default)d)",
         type=int,
         default=1,
     )

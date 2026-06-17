@@ -12,6 +12,7 @@ from pathlib import Path
 
 import arf
 import numpy as np
+from packaging.version import Version
 
 from arfx import core
 
@@ -21,8 +22,8 @@ log = logging.getLogger("arfx-oephys")
 def first_existing(*paths: Path) -> Path | None:
     """Iterate through a sequence of paths and return the first one that exists, or None if none do"""
     for path in paths:
-        if path.exists:
-            return Path
+        if path.exists():
+            return path
 
 
 class dataset:
@@ -37,7 +38,7 @@ class dataset:
 class continuous_dset(dataset):
     """Represents a dataset from a continuous processor (i.e. sampled data)"""
 
-    def __init__(self, base: Path, structure: dict):
+    def __init__(self, base: Path, structure: dict, gui_version: Version):
         self.path = base / "continuous" / structure["folder_name"]
         self.nchannels = structure.pop("num_channels")
         self.channel_attrs = structure.pop("channels")
@@ -50,18 +51,19 @@ class continuous_dset(dataset):
             )
         super().__init__(base, structure)
 
-        # Sample index files:
-        # 0.5.x: 'timestamps.npy'; 0.6.0+: 'sample_numbers.npy'. Try the newer
-        # name first because 'timestamps.npy' is something else in 0.6+.
-        # Also: this file can get deleted during spike sorting, so if both are
-        # missing, we fall back on the sync_messages.txt file
+        # Sample index file. This can get deleted during spike sorting, so if
+        # it's missing we fall back on the sync_messages.txt file
+        if gui_version < Version("0.6.0"):
+            tspath = self.path / "timestamps.npy"
+        else:
+            tspath = self.path / "sample_numbers.npy"
         try:
-            tspath = first_existing(self.path / "sample_numbers.npy", self.path / "timestamps.npy")
             timestamps = np.load(tspath, mmap_mode="r")
             sample_offset = timestamps[0]
         except FileNotFoundError as err:
             log.warning(
-                "- warning: timestamps.npy/sample_numbers.npy file is missing for %s; falling back on sync_messages.txt",
+                "- warning: %s file is missing for %s; falling back on sync_messages.txt",
+                tspath.name,
                 self.name,
             )
             processor, idx, subidx = (
@@ -116,33 +118,44 @@ class continuous_dset(dataset):
 class spikes_dset(dataset):
     """Represents a dataset of spike times (not implemented)"""
 
-    def __init__(self, base: Path, structure: dict):
+    def __init__(self, base: Path, structure: dict, gui_version: Version):
         raise NotImplementedError("spikes datasets not yet supported")
 
 
 class event_dset(dataset):
     """Represents a dataset from an event-type processor (i.e. marked point process)"""
 
-    def __init__(self, base: Path, structure: dict):
+    def __init__(self, base: Path, structure: dict, gui_version: Version):
         super().__init__(base, structure)
         self.attrs.pop("event_metadata", None)  # metadata is not kept
         path = base / "events" / structure["folder_name"]
         # Event times (in samples)
-        # 0.5.x: 'timestamps.npy'
-        # 0.6.0+: 'sample_numbers.npy'
-        tsfile = first_existing(path / "sample_numbers.npy", path / "timestamps.npy")
-        timestamps = np.load(tsfile)
-        # this file doesn't exist in 0.6.0+
-        channels = np.load(path, "channels.npy")
+        if gui_version < Version("0.6.0"):
+            timestamps = np.load(path / "timestamps.npy")
+        else:
+            timestamps = np.load(path / "sample_numbers.npy")
         self.sampling_rate = structure["sample_rate"]
         if structure["type"] == "string":
-            messages = np.load(path, "text.npy")
-            self.data = np.rec.fromarrays(
-                [timestamps, messages, channels], names=("start", "message", "channel")
-            )
-            self.units = ("samples", "", "")
+            messages = np.load(path / "text.npy")
+            if gui_version < Version("0.6.0"):
+                # Not exactly sure what this file holds, but we'll read it
+                # if it's there
+                channels = np.load(path / "channels.npy")
+                self.data = np.rec.fromarrays(
+                    [timestamps, messages, channels],
+                    names=("start", "message", "channel"),
+                )
+                self.units = ("samples", "", "")
+            else:
+                self.data = np.rec.fromarrays(
+                    [timestamps, messages], names=("start", "message")
+                )
+                self.units = ("samples", "")
         elif structure["type"] == "int16":
-            events = np.load(path / "channel_states.npy")
+            if gui_version < Version("0.6.0"):
+                events = np.load(path / "channel_states.npy")
+            else:
+                events = np.load(path / "states.npy")
             self.data = np.rec.fromarrays([timestamps, events], names=("start", "ttl"))
             self.units = ("samples", "")
         else:
@@ -180,23 +193,26 @@ class recording:
         with open(path / "structure.oebin") as fp:
             structure = json.load(fp)
 
+        # need to dispatch on version because the format layout changed
+        gui_version = Version(structure["GUI version"])
+
         for processor in structure.pop("continuous", ()):
             try:
-                dset = continuous_dset(path, processor)
+                dset = continuous_dset(path, processor, gui_version)
             except NotImplementedError as e:
                 log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
                 self.datasets[dset.name] = dset
         for processor in structure.pop("spikes", ()):
             try:
-                dset = spikes_dset(path, processor)
+                dset = spikes_dset(path, processor, gui_version)
             except NotImplementedError as e:
                 log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
                 self.datasets[dset.name] = dset
         for processor in structure.pop("events", ()):
             try:
-                dset = event_dset(path, processor)
+                dset = event_dset(path, processor, gui_version)
             except NotImplementedError as e:
                 log.warning("- %s skipped: %s", processor["folder_name"], e)
             else:
@@ -298,7 +314,9 @@ def script(argv=None):
         dest="arffile",
         help="the destination ARF file (new data are appended)",
     )
-    p.add_argument("path", type=Path, nargs="+", help="the source open-ephys data directories")
+    p.add_argument(
+        "path", type=Path, nargs="+", help="the source open-ephys data directories"
+    )
 
     args = p.parse_args(argv)
     core.setup_log(log, args.verbose)
@@ -318,17 +336,17 @@ def script(argv=None):
         log.info("Opened '%s' for writing", args.arffile)
         for path in args.path:
             try:
-                m = ts_regex.search(path)
+                m = ts_regex.search(str(path))
                 timestamp = datetime.datetime(*(int(v) for v in m.groups()))
             except (AttributeError, ValueError) as e:
                 log.error("can't parse timestamp from directory name %s: %s", path, e)
                 p.exit(-1)
-            for structfile in path.glob("**/structure.oebin", recursive=True):
-                dir = structfile.dirname
+            for structfile in path.glob("**/structure.oebin"):
+                dir = structfile.parent
                 log.info("Reading from '%s':", dir)
                 rec = recording(dir)
 
-                rec_name = dir.replace("/", "_")
+                rec_name = str(dir).replace("/", "_")
                 entry = arf.create_entry(
                     fp,
                     name=rec_name,

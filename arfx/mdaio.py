@@ -70,9 +70,9 @@ class mdafile:
             self.dtype = np.dtype(NUM_DTYPE[dt_code])
         except KeyError as err:
             raise ValueError("invalid data type code in header") from err
-        assert (
-            self.dtype.itemsize == itemsize
-        ), "item size does not match header data type"
+        assert self.dtype.itemsize == itemsize, (
+            "item size does not match header data type"
+        )
         if ndims < 0:
             ndims = abs(ndims)
             fmt = b"<" + b"Q" * ndims
