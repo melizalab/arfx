@@ -9,3 +9,7 @@
 *.wav
 /examples/
 .DS_Store
+CLAUDE.md
+/.claude/
+COMMIT_MSG
+arf-CLAUDE.md
