@@ -1,101 +1,13 @@
 # -*- mode: python -*-
 import sys
-import time
 from pathlib import Path
 
 import arf
 import numpy as np
 import pytest
-from numpy.random import randint, randn
+from conftest import DATASETS as datasets
 
 from arfx import core, io
-
-entry_base = "entry_%03d"
-tstamp = time.mktime(time.localtime())
-entry_attributes = {
-    "intattr": 1,
-    "vecattr": [1, 2, 3],
-    "arrattr": randn(5),
-    "strattr": "an attribute",
-}
-datasets = [
-    dict(
-        name="acoustic",
-        data=randn(100000),
-        sampling_rate=20000,
-        datatype=arf.DataTypes.ACOUSTIC,
-        maxshape=(None,),
-        microphone="DK-1234",
-        compression=0,
-    ),
-    dict(
-        name="neural",
-        data=(randn(100000) * 2**16).astype("h"),
-        sampling_rate=20000,
-        datatype=arf.DataTypes.EXTRAC_HP,
-        compression=9,
-    ),
-    dict(
-        name="multichannel",
-        data=randn(10000, 2),
-        sampling_rate=20000,
-        datatype=arf.DataTypes.ACOUSTIC,
-    ),
-    dict(
-        name="spikes",
-        data=randint(0, 100000, 100),
-        datatype=arf.DataTypes.SPIKET,
-        units="samples",
-        sampling_rate=20000,  # required
-    ),
-    dict(
-        name="empty-spikes",
-        data=np.array([], dtype="f"),
-        datatype=arf.DataTypes.SPIKET,
-        method="broken",
-        maxshape=(None,),
-        units="s",
-    ),
-    dict(
-        name="events",
-        data=np.rec.fromrecords(
-            [(1.0, 1, b"stimulus"), (5.0, 0, b"stimulus")],
-            names=("start", "state", "name"),
-        ),  # 'start' required
-        datatype=arf.DataTypes.EVENT,
-        units=(b"s", b"", b""),
-    ),  # only bytes supported by h5py
-]
-
-
-@pytest.fixture
-def src_arf_file(tmp_path):
-    path = tmp_path / "input.arf"
-    with arf.open_file(path, "w") as fp:
-        entry = arf.create_entry(fp, "entry", tstamp)
-        for dset in datasets:
-            _ = arf.create_dataset(entry, **dset)
-    return path
-
-
-@pytest.fixture
-def src_wav_files(tmp_path):
-    test_dsets = datasets[:3]
-    test_files = []
-    for dset in test_dsets:
-        src_file = (tmp_path / dset["name"]).with_suffix(".wav")
-        src_data = dset["data"]
-        nchannels = src_data.shape[1] if src_data.ndim > 1 else 1
-        with io.open(
-            src_file,
-            mode="w",
-            nchannels=nchannels,
-            dtype=src_data.dtype,
-            sampling_rate=dset["sampling_rate"],
-        ) as fp:
-            fp.write(dset["data"])
-        test_files.append(src_file)
-    return test_files
 
 
 def test_add_entries(src_wav_files, tmp_path):
