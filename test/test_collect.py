@@ -126,14 +126,11 @@ def test_check_entry_consistency_rejects_mismatched_channels(tmp_path, caplog):
     assert "do not match" in caplog.text
 
 
-def test_check_entry_consistency_entries_filter_is_inverted(src):
-    # CHARACTERIZATION: this is a bug. The docstring says "if not None, restrict
-    # to entries with supplied names" and -e/--entries is documented as "list of
-    # entries to unpack", but the guard is
-    #     if entries is not None and entry_name in entries: continue
-    # so naming an entry EXCLUDES it. Should be `not in`.
+def test_check_entry_consistency_entries_filter_restricts(src):
+    # -e/--entries names the entries to unpack. The guard used to test `in`
+    # rather than `not in`, so naming an entry excluded it instead.
     entry_names, _ = collect.check_entry_consistency(src, entries=["entry_000"])
-    assert entry_names == ["entry_001", "entry_002"]
+    assert entry_names == ["entry_000"]
 
 
 # ---------------------------------------------------------- iter_entry_chunks
@@ -244,16 +241,17 @@ def test_collect_warns_on_mixed_sampling_rates(tmp_path, caplog):
     assert "same sampling rate" in caplog.text
 
 
-def test_collect_on_inconsistent_file_raises_typeerror(tmp_path):
-    # CHARACTERIZATION: check_entry_consistency returns None on failure, but the
-    # caller unpacks the result into two names without checking, so an
-    # inconsistent file exits with an unhandled TypeError after having already
-    # logged a clear diagnostic. It should exit non-zero with the message.
+def test_collect_on_inconsistent_file_exits_nonzero(tmp_path, caplog):
+    # check_entry_consistency returns None on failure. The caller used to
+    # unpack that into two names, burying its own diagnostic under a TypeError.
     path = make_sampled_file(tmp_path / "a.arf", nentries=1)
     with arf.open_file(path, "a") as fp:
         entry = arf.create_entry(fp, "extra", 9999)
         arf.create_dataset(
             entry, "other", np.zeros(100, dtype="h"), sampling_rate=SAMPLING_RATE
         )
-    with pytest.raises(TypeError):
-        run_collect(path, tmp_path / "out.dat")
+    out = tmp_path / "out.dat"
+    assert collect.collect_sampled_script([str(path), str(out)]) == 1
+    assert "do not match" in caplog.text
+    assert "unable to collect" in caplog.text
+    assert not out.exists()

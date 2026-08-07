@@ -38,6 +38,21 @@ default_entry_template = "{base}_{index:04}"
 log = logging.getLogger("arfx")  # root logger
 
 
+def check_file_version(arfp: h5.File) -> None:
+    """Check a file's ARF version, logging a warning if it may be incompatible.
+
+    arf signals incompatibility by raising the warning classes rather than
+    emitting them through the warnings module, and the check is advisory on
+    both sides, so every operation logs and carries on. Half the call sites
+    used to abort instead, which meant the same file was readable or not
+    depending on which subcommand you used.
+    """
+    try:
+        arf.check_file_version(arfp)
+    except Warning as e:
+        log.warning("warning: %s", e)
+
+
 def entry_repr(entry: h5.Group) -> str:
     from h5py import h5t
 
@@ -231,7 +246,7 @@ def add_entries(
     if attrs is None:
         attrs = {}
     with arf.open_file(tgt, "a") as arfp:
-        arf.check_file_version(arfp)
+        check_file_version(arfp)
         arf.set_attributes(
             arfp, file_creator="org.meliza.arfx/arfx " + __version__, overwrite=False
         )
@@ -315,14 +330,14 @@ def extract_entries(
         raise FileNotFoundError(f"the target directory {directory} does not exist")
 
     with arf.open_file(src, "r") as arfp:
-        try:
-            arf.check_file_version(arfp)
-        except Warning as e:
-            log.warning("warning: %s", e)
+        check_file_version(arfp)
         for index, ename in enumerate(arfp):
             entry = arfp[ename]
             attrs = dict(entry.attrs)
-            mtime = attrs.get("timestamp", [None])[0]
+            # entries written by other tools may have no timestamp; leave the
+            # output file's mtime alone rather than passing None to os.utime
+            timestamp = attrs.get("timestamp", None)
+            mtime = timestamp[0] if timestamp is not None else None
             if entries is None or ename in entries:
                 for channel in entry:
                     if channels is not None and channel not in channels:
@@ -344,7 +359,8 @@ def extract_entries(
 
                     with io.open(fname, "w", **attrs) as fp:
                         fp.write(dset)
-                    os.utime(fname, (os.stat(fname).st_atime, mtime))
+                    if mtime is not None:
+                        os.utime(fname, (os.stat(fname).st_atime, mtime))
 
                     log.debug("%s -> %s", dset.name, fname)
 
@@ -364,7 +380,7 @@ def delete_entries(
 
     count = 0
     with arf.open_file(src, "r+") as arfp:
-        arf.check_file_version(arfp)
+        check_file_version(arfp)
         for entry in entries:
             if entry in arfp:
                 try:
@@ -394,7 +410,7 @@ def copy_entries(
     """
     acache = lru_cache(maxsize=None)(arf.open_file)
     with arf.open_file(tgt, "a") as arfp:
-        arf.check_file_version(arfp)
+        check_file_version(arfp)
         for f in files:
             # this is a bit tricky:
             # file.arf is a file; file.arf/entry is entry
@@ -435,10 +451,7 @@ def list_entries(
     """
     print(f"{src}:")
     with arf.open_file(src, "r") as arfp:
-        try:
-            arf.check_file_version(arfp)
-        except Warning as e:
-            log.warning("warning: %s", e)
+        check_file_version(arfp)
         if entries is None:
             for name in arfp:
                 entry = arfp[name]
@@ -473,10 +486,7 @@ def update_entries(
         raise FileNotFoundError(f"the file {src} does not exist")
 
     with arf.open_file(src, "r+") as arfp:
-        try:
-            arf.check_file_version(arfp)
-        except Warning as e:
-            log.warning("warning: %s", e)
+        check_file_version(arfp)
         for entry_name in arfp:
             entry_name = PurePosixPath(entry_name).name
             if entries is None or entry_name in entries:
@@ -496,10 +506,7 @@ def write_toplevel_attribute(
 ) -> None:
     """Store contents of files as text in top-level attribute with basename of each file"""
     with arf.open_file(tgt, "a") as arfp:
-        try:
-            arf.check_file_version(arfp)
-        except Warning as e:
-            log.warning("warning: %s", e)
+        check_file_version(arfp)
         for fname in files:
             fname = Path(fname)
             attrname = f"user_{fname.name}"
@@ -512,10 +519,7 @@ def read_toplevel_attribute(
 ) -> None:
     """Print text data stored in top-level attributes by write_toplevel_attribute()"""
     with arf.open_file(src, "r") as arfp:
-        try:
-            arf.check_file_version(arfp)
-        except Warning as e:
-            log.warning("warning: %s", e)
+        check_file_version(arfp)
         for attrname in attrnames:
             aname = f"user_{attrname}"
             print(f"{aname}:")

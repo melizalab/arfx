@@ -261,3 +261,40 @@ def test_repack(src_arf_file):
 def test_repack_nonexistent_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         core.repack_file(tmp_path / "no_such_file.arf")
+
+
+def _unversioned_file(path, **attrs):
+    """A file that arf.check_file_version will object to."""
+    import h5py as h5
+
+    with h5.File(path, "w") as fp:
+        for key, value in attrs.items():
+            fp.attrs[key] = value
+        entry = fp.create_group("entry")
+        entry.attrs["timestamp"] = arf.convert_timestamp(1000)
+        entry.create_dataset("pcm", data=np.zeros(100, dtype="h"))
+        entry["pcm"].attrs["sampling_rate"] = 1000
+        entry["pcm"].attrs["units"] = ""
+    return path
+
+
+@pytest.mark.parametrize("attrs", [{}, {"arf_version": "1.0"}, {"arf_version": "3.0"}])
+def test_version_check_warns_rather_than_aborting(tmp_path, attrs, caplog):
+    # arf raises the warning classes rather than emitting them, and the check is
+    # advisory on both sides. Every operation logs and carries on; half of them
+    # used to abort, so whether a file was readable depended on the subcommand.
+    src = _unversioned_file(tmp_path / "odd.arf", **attrs)
+    core.list_entries(src)
+    core.extract_entries(src, directory=tmp_path)
+    core.copy_entries(tmp_path / "copy.arf", [src])
+    assert "warning" in caplog.text
+
+
+def test_extract_entry_without_timestamp(tmp_path):
+    # entries written by other tools may have no timestamp; the output file's
+    # mtime is left alone rather than passing None to os.utime
+    src = _unversioned_file(tmp_path / "nots.arf", arf_version="2.1")
+    with arf.open_file(src, "r+") as fp:
+        del fp["entry"].attrs["timestamp"]
+    core.extract_entries(src, directory=tmp_path)
+    assert (tmp_path / "entry_pcm.wav").exists()

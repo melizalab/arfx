@@ -14,7 +14,7 @@ import numpy as np
 from tqdm import tqdm
 
 from . import io
-from .core import __version__, setup_log
+from .core import __version__, check_file_version, setup_log
 
 log = logging.getLogger("arfx-collect")
 
@@ -79,7 +79,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
     entry_names = []
     channel_props = None
     for entry_name in arf.keys_by_creation(arfp):
-        if entries is not None and entry_name in entries:
+        if entries is not None and entry_name not in entries:
             continue
         entry = arfp[entry_name]
         if not isinstance(entry, h5.Group):
@@ -196,10 +196,17 @@ def collect_sampled_script(argv=None):
 
     with arf.open_file(args.arffile, "r") as arfp:
         log.info("unpacking '%s'", args.arffile)
-        arf.check_file_version(arfp)
-        entry_names, channel_props = check_entry_consistency(
+        check_file_version(arfp)
+        consistency = check_entry_consistency(
             arfp, args.entries, args.channels, predicate=arf.is_time_series
         )
+        if consistency is None:
+            # check_entry_consistency has already logged which entry is the
+            # problem; unpacking the None here used to bury that under a
+            # TypeError traceback
+            log.error("unable to collect data from inconsistent file")
+            return 1
+        entry_names, channel_props = consistency
         if not all_items_equal(channel_props, operator.itemgetter("sampling_rate")):
             log.warning(" - warning: not all datasets have the same sampling rate")
         if not all_items_equal(channel_props, operator.itemgetter("units")):

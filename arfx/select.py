@@ -17,13 +17,13 @@ import sys
 
 import arf
 
-log = logging.getLogger("arfx-collect")
+log = logging.getLogger("arfx-select")
 
 
 def main(argv=None):
     import argparse
 
-    from arfx.core import __version__, setup_log
+    from arfx.core import __version__, check_file_version, setup_log
 
     p = argparse.ArgumentParser(prog="arfx-select", description=__doc__)
     p.add_argument("--version", action="version", version="%(prog)s " + __version__)
@@ -64,7 +64,7 @@ def main(argv=None):
 
     src = arf.open_file(args.src, "r")
     log.info("selecting from '%s'", args.src)
-    arf.check_file_version(src)
+    check_file_version(src)
 
     entry_names = [n for n in arf.keys_by_creation(src) if arf.is_entry(src[n])]
     if args.dry_run:
@@ -104,12 +104,19 @@ def main(argv=None):
                         tgt_file.copy(src_dset, tgt_entry, name=name)
                         continue
                     else:
-                        src_units = src_dset_attrs.pop("units", "")
-                        # this is to deal with jrecord-generated files that
-                        # violate spec on the units field
+                        # The spec requires one unit per compound field, but
+                        # jrecord writes a single scalar, so pad that out.
+                        # Either way the result has to be handed back as a
+                        # list: h5py returns the attribute as an ndarray, and
+                        # create_dataset tests it with isinstance(list, tuple).
+                        # This block used to pop the attribute and put it back
+                        # only in the scalar case, which made every conforming
+                        # marked dataset fail for want of any units at all.
+                        src_units = src_dset_attrs.get("units", "")
                         req = len(src_dset.dtype.names)
-                        if isinstance(src_units, str) or len(src_units) != req:
-                            src_dset_attrs["units"] = [src_units] + [b""] * (req - 1)
+                        if isinstance(src_units, str | bytes) or len(src_units) != req:
+                            src_units = [src_units] + [b""] * (req - 1)
+                        src_dset_attrs["units"] = list(src_units)
                 selected, offset = arf.select_interval(
                     src_dset, interval["begin"], interval["end"]
                 )

@@ -10,9 +10,6 @@ Segments are fed through a file rather than stdin: the -s argument is
 `type=open`, so a path is all that is needed and the tests do not have to
 monkeypatch sys.stdin.
 
-Note that the base fixture deliberately has no marked point process dataset.
-select.py cannot currently write one back out; see
-test_conforming_marked_units_raises for the details.
 """
 
 import json
@@ -220,22 +217,19 @@ def test_channels_flag_restricts_output(tmp_path, src_file):
 # ---------------------------------------------------- marked point process data
 
 
-def test_conforming_marked_units_raises(tmp_path, marked_file):
-    # CHARACTERIZATION: this is a bug, and a serious one -- arfx-select cannot
-    # process a spec-conforming marked point process at all.
-    #
-    # select.py:107 pops `units` out of the attribute dict unconditionally, but
-    # only puts it back at line 112, inside the branch that repairs jrecord's
-    # malformed scalar. A conforming attribute (one unit per compound field)
-    # takes the other branch, so `units` is simply lost and arf.create_dataset
-    # rejects the compound data for having no unit sequence.
-    #
-    # The effect is inverted from the intent: the module works only on the
-    # broken files the workaround was written for.
-    with pytest.raises(ValueError, match="requires sequence of units"):
-        run_select(
-            tmp_path, marked_file, [{"entry": "entry", "begin": 0.0, "end": 1.0}]
-        )
+def test_conforming_marked_units_round_trip(tmp_path, marked_file):
+    # Two separate things had to be true for this to work, and neither was:
+    # the units attribute had to survive the jrecord repair block (it was
+    # popped and only restored in the scalar case), and it had to be handed to
+    # create_dataset as a list rather than the ndarray h5py hands back.
+    tgt = run_select(
+        tmp_path, marked_file, [{"entry": "entry", "begin": 5.0, "end": 6.0}]
+    )
+    with arf.open_file(tgt, "r") as fp:
+        events = fp["entry_00000"]["events"]
+        assert list(events.attrs["units"]) == ["samples", ""]
+        assert events["start"].tolist() == [500]  # 5500 rebased
+        assert events["name"].tolist() == [b"b"]
 
 
 def test_malformed_units_on_marked_dataset_raises(tmp_path, jrecord_file):

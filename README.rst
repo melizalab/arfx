@@ -123,8 +123,8 @@ to the target container.
 The ``-d`` (delete) operation uses the same syntax as the extract
 operation, but instead of extracting the entries, they are deleted.
 Because of limitations in the underlying HDF5 library, this does not
-free up the space, so the file is repacked unless the ``-P`` option is
-set.
+free up the space; pass the ``-P`` option to repack the file afterwards
+and reclaim it. Repacking requires ``h5repack`` on the path.
 
 The ``-U`` (update) operation can be used to add or update attributes of
 entries.
