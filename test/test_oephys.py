@@ -23,6 +23,7 @@ import json
 import arf
 import numpy as np
 import pytest
+from packaging.version import Version
 
 from arfx import oephys
 
@@ -385,71 +386,65 @@ def test_int16_events(tmp_path, tmp_path_factory, gui_version):
 # ------------------------------------------------------- sample-offset fallback
 
 
-def test_falls_back_to_sync_messages_pre_06(tmp_path, tmp_path_factory, caplog):
-    # the sample index file is routinely deleted during spike sorting, so the
-    # start time has to be recoverable from sync_messages.txt
+def test_falls_back_to_sync_messages(tmp_path, tmp_path_factory, gui_version, caplog):
+    # the sample index file can be deleted during spike sorting, so the start
+    # time has to be recoverable from sync_messages.txt -- in either wording
     root = tmp_path_factory.mktemp("nosn")
-    tree = build_tree(root, OLD, write_sample_numbers=False)
+    tree = build_tree(root, gui_version, write_sample_numbers=False)
     tgt = run_oephys(tmp_path / "out.arf", tree)
     with arf.open_file(tgt, "r") as fp:
         attrs = only_entry(fp)["CH1"].attrs
-        assert attrs["offset"] == pytest.approx(SAMPLE_OFFSET / rate(OLD))
+        assert attrs["offset"] == pytest.approx(SAMPLE_OFFSET / rate(gui_version))
     assert "falling back on sync_messages" in caplog.text
 
 
-def test_falls_back_to_sync_messages_post_06(tmp_path, tmp_path_factory):
-    # CHARACTERIZATION: arfx-oephys cannot import a spike-sorted recording from
-    # any GUI at or after 0.6 -- which is to say, any current recording.
-    #
-    # Two independent breakages sit on this one path, and neither was updated
-    # when 1ee136e added 0.6 support to the rest of the module:
-    #
-    #  1. continuous_dset reads structure["source_processor_sub_idx"], a key
-    #     0.6 dropped from structure.oebin. That KeyError is raised *inside*
-    #     the `except FileNotFoundError` handler, so it is what the user sees.
-    #  2. If it got past that, find_sync_time's regex expects
-    #     "Processor: X Id: N subProcessor: N start time: N", while 0.6+ writes
-    #     "Start Time for X (N) - stream @ R Hz: N". Nothing matches, so it
-    #     returns None and the caller raises RuntimeError.
-    #
-    # The fallback exists precisely for the re-import-after-sorting workflow
-    # the README describes, so this is not an edge case.
-    root = tmp_path_factory.mktemp("nosn-new")
-    tree = build_tree(root, NEW, write_sample_numbers=False)
-    with pytest.raises(KeyError, match="source_processor_sub_idx"):
-        run_oephys(tmp_path / "out.arf", tree)
+def structure_of(tree, gui_version):
+    rec = recording_dir(tree, gui_version)
+    return rec, json.loads((rec / "structure.oebin").read_text())["continuous"][0]
 
 
-def test_find_sync_time_does_not_match_post_06_wording(tmp_path_factory):
-    # The second half of the breakage above, isolated from the KeyError that
-    # currently masks it. Reads the real 0.6+ wording directly.
-    root = tmp_path_factory.mktemp("syncfmt")
-    tree = build_tree(root, NEW)
-    rec = recording_dir(tree, NEW)
-    p = PROFILES[NEW]
-    assert oephys.find_sync_time(rec, p["processor_name"], p["processor_id"], 0) is None
-    # the pre-0.6 wording is what it was written against, and still works
-    old_root = tmp_path_factory.mktemp("syncfmt-old")
-    old_rec = recording_dir(build_tree(old_root, OLD), OLD)
-    q = PROFILES[OLD]
-    assert (
-        oephys.find_sync_time(old_rec, q["processor_name"], q["processor_id"], 0)
-        == SAMPLE_OFFSET
-    )
+def test_find_sync_time_reads_both_wordings(tmp_path_factory, gui_version):
+    # The matcher on its own. The two generations share no literal text, so
+    # each pattern has to be exercised against the wording it was written for.
+    tree = build_tree(tmp_path_factory.mktemp("syncfmt"), gui_version)
+    rec, structure = structure_of(tree, gui_version)
+    assert oephys.find_sync_time(rec, structure, Version(gui_version)) == SAMPLE_OFFSET
 
 
-def test_missing_offset_everywhere_is_fatal(tmp_path, tmp_path_factory):
+def test_find_sync_time_returns_none_for_unknown_processor(
+    tmp_path_factory, gui_version
+):
+    tree = build_tree(tmp_path_factory.mktemp("syncmiss"), gui_version)
+    rec, structure = structure_of(tree, gui_version)
+    structure["source_processor_name"] = "Some Other Processor"
+    assert oephys.find_sync_time(rec, structure, Version(gui_version)) is None
+
+
+def test_find_sync_time_without_stream_identifier(tmp_path_factory):
+    # a post-0.6 structure.oebin with no stream_name cannot be matched against
+    # the newer wording, but that is a "no match", not a KeyError
+    tree = build_tree(tmp_path_factory.mktemp("nostream"), NEW)
+    rec, structure = structure_of(tree, NEW)
+    del structure["stream_name"]
+    assert oephys.find_sync_time(rec, structure, Version(NEW)) is None
+
+
+def test_missing_offset_everywhere_is_fatal(tmp_path, tmp_path_factory, gui_version):
     root = tmp_path_factory.mktemp("noboth")
-    tree = build_tree(root, OLD, write_sample_numbers=False, write_sync_messages=False)
+    tree = build_tree(
+        root, gui_version, write_sample_numbers=False, write_sync_messages=False
+    )
     with pytest.raises(FileNotFoundError):
         run_oephys(tmp_path / "out.arf", tree)
 
 
-def test_sync_message_without_matching_processor_is_fatal(tmp_path, tmp_path_factory):
+def test_sync_message_without_matching_processor_is_fatal(
+    tmp_path, tmp_path_factory, gui_version
+):
     root = tmp_path_factory.mktemp("nomatch")
-    tree = build_tree(root, OLD, write_sample_numbers=False)
-    rec = recording_dir(tree, OLD)
-    (rec / "sync_messages.txt").write_text("Processor: Other Id: 1 nonsense\n")
+    tree = build_tree(root, gui_version, write_sample_numbers=False)
+    rec = recording_dir(tree, gui_version)
+    (rec / "sync_messages.txt").write_text("nothing resembling a start time\n")
     with pytest.raises(RuntimeError, match="unable to determine sync time"):
         run_oephys(tmp_path / "out.arf", tree)
 
@@ -539,15 +534,12 @@ def test_extra_attributes_and_datatype(tmp_path, tree):
         assert entry["CH1"].attrs["datatype"] == arf.DataTypes.EXTRAC_HP
 
 
-def test_skip_empty(tmp_path, tmp_path_factory, caplog):
-    # the sample index is taken from sync_messages here; see
-    # test_empty_recording_with_index_file_crashes for why it cannot come from
-    # the .npy in this case
+def test_skip_empty(tmp_path, tmp_path_factory, gui_version, caplog):
     root = tmp_path_factory.mktemp("empty")
     tree = build_tree(
         root,
-        OLD,  # the fallback this needs is broken post-0.6; see
-        data=np.array([], dtype="int16"),  # test_falls_back_to_sync_messages_post_06
+        gui_version,
+        data=np.array([], dtype="int16"),
         write_sample_numbers=False,
     )
     tgt = run_oephys(tmp_path / "out.arf", tree, extra=["--skip-empty"])
@@ -556,19 +548,20 @@ def test_skip_empty(tmp_path, tmp_path_factory, caplog):
     assert "skipping empty dataset" in caplog.text
 
 
-def test_empty_recording_with_index_file_crashes(
-    tmp_path, tmp_path_factory, gui_version
+def test_empty_recording_with_empty_index_falls_back(
+    tmp_path, tmp_path_factory, gui_version, caplog
 ):
-    # CHARACTERIZATION: an aborted recording leaves a zero-length continuous.dat
-    # alongside a zero-length sample index. continuous_dset reads the start time
-    # as timestamps[0] without checking that the array is non-empty, so the
-    # IndexError happens while the recording is being opened -- before
-    # --skip-empty gets a chance to skip anything. The flag cannot rescue the
-    # case it most obviously exists for.
+    # An aborted recording leaves a zero-length continuous.dat alongside a
+    # zero-length sample index. An empty index is treated the same as a missing
+    # one, so the start time comes from sync_messages and --skip-empty can then
+    # do its job -- previously the IndexError fired while the recording was
+    # being opened, before the flag was consulted.
     root = tmp_path_factory.mktemp("emptyidx")
     tree = build_tree(root, gui_version, data=np.array([], dtype="int16"))
-    with pytest.raises(IndexError):
-        run_oephys(tmp_path / "out.arf", tree, extra=["--skip-empty"])
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["--skip-empty"])
+    with arf.open_file(tgt, "r") as fp:
+        assert "CH1" not in only_entry(fp)
+    assert "is empty" in caplog.text
 
 
 def test_dry_run_writes_nothing(tmp_path, tree):

@@ -51,31 +51,36 @@ class continuous_dset(dataset):
             )
         super().__init__(base, structure)
 
-        # Sample index file. This can get deleted during spike sorting, so if
-        # it's missing we fall back on the sync_messages.txt file
+        # Sample index file. This can get deleted during spike sorting, and is
+        # empty for an aborted recording, so in either case we fall back on the
+        # sync_messages.txt file rather than failing.
         if gui_version < Version("0.6.0"):
             tspath = self.path / "timestamps.npy"
         else:
             tspath = self.path / "sample_numbers.npy"
-        try:
-            timestamps = np.load(tspath, mmap_mode="r")
-            sample_offset = timestamps[0]
-        except FileNotFoundError as err:
+        sample_offset = None
+        if not tspath.exists():
             log.warning(
                 "- warning: %s file is missing for %s; falling back on sync_messages.txt",
                 tspath.name,
                 self.name,
             )
-            processor, idx, subidx = (
-                structure["source_processor_name"],
-                structure["source_processor_id"],
-                structure["source_processor_sub_idx"],
-            )
-            sample_offset = find_sync_time(base, processor, idx, subidx)
+        else:
+            timestamps = np.load(tspath, mmap_mode="r")
+            if timestamps.size > 0:
+                sample_offset = timestamps[0]
+            else:
+                log.warning(
+                    "- warning: %s is empty for %s; falling back on sync_messages.txt",
+                    tspath.name,
+                    self.name,
+                )
+        if sample_offset is None:
+            sample_offset = find_sync_time(base, structure, gui_version)
             if sample_offset is None:
                 raise RuntimeError(
                     f"unable to determine sync time for {self.name} dataset"
-                ) from err
+                )
 
         self.offset = sample_offset / self.sampling_rate
         self.dtype = np.dtype("int16")
@@ -220,23 +225,60 @@ class recording:
         self.attrs.update(structure)
 
 
-def find_sync_time(path: Path, processor: dict, id: int | str, subid: int | str) -> int:
-    """Look up the start time for a processor using the sync_messages.txt file. Returns None if there is no match"""
+# sync_messages.txt is not covered by the format documentation, and its wording
+# changed completely at GUI 0.6 along with the way a stream is identified: by a
+# numeric sub-processor index before, by name after. The two share no literal
+# text, so a reader that knows only one of them matches nothing in the other
+# rather than failing in any visible way.
+_SYNC_RX_LEGACY = re.compile(
+    r"Processor: (?P<processor>.+?) Id: (?P<id>\d+?) "
+    r"subProcessor: (?P<stream>\d+?) start time: (?P<start>\d+)"
+)
+_SYNC_RX = re.compile(
+    r"Start Time for (?P<processor>.+?) \((?P<id>\d+)\) - (?P<stream>.+?) "
+    r"@ [\d.]+ \w*Hz: (?P<start>\d+)"
+)
 
-    rx = re.compile(
-        r"Processor: (?P<processor>.+?) Id: (?P<id>\d+?) subProcessor: (?P<subid>\d+?) start time: (?P<start>\d+)"
-    )
+
+def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | None:
+    """Look up the start sample for a processor in sync_messages.txt.
+
+    Takes the whole continuous-processor structure rather than individual
+    fields, because which fields identify a stream depends on the GUI version.
+    Returns None if there is no matching line.
+    """
+    if gui_version < Version("0.6.0"):
+        rx = _SYNC_RX_LEGACY
+        stream = structure.get("source_processor_sub_idx")
+
+        # the legacy sub-processor index is numeric on both sides
+        def same_stream(found):
+            return int(found) == int(stream)
+    else:
+        rx = _SYNC_RX
+        stream = structure.get("stream_name")
+
+        def same_stream(found):
+            return found == stream
+
+    if stream is None:
+        log.debug("- no stream identifier in structure.oebin for this GUI version")
+        return None
+
+    name = structure["source_processor_name"]
+    ident = int(structure["source_processor_id"])
     with open(path / "sync_messages.txt") as fp:
         for line in fp:
             match = rx.match(line)
             if match is None:
                 continue
             if (
-                match.group("processor") == processor
-                and int(match.group("id")) == int(id)
-                and int(match.group("subid")) == int(subid)
+                match.group("processor") == name
+                and int(match.group("id")) == ident
+                and same_stream(match.group("stream"))
             ):
                 return int(match.group("start"))
+    return None
 
 
 def script(argv=None):
