@@ -18,12 +18,22 @@ patch release. Each is reachable from real input unless noted.
   experiment/recording indices would be reproducible. Changing it renames
   entries in new archives, so it needs a deliberate release.
 
-- **`extract_entries` iterates the file directly while `list_entries` and
-  `collect` use `keys_by_creation`.** For files written by `arf.open_file` the
-  two agree, because creation order is tracked and h5py honours it. They
-  diverge for files written by anything else, where `keys_by_creation` silently
-  falls back to alphabetical. The `{index}` field in a `-n` template therefore
-  means different things depending on both the operation and the writer.
+- ~~**`extract_entries` iterates the file directly while `list_entries` and
+  `collect` use `keys_by_creation`.**~~ The divergence claimed here does not
+  exist. Measured both ways: on a file written by `arf.open_file` direct
+  iteration and `keys_by_creation` both give creation order, because h5py
+  honours the tracking flag; on an untracked file both give name order,
+  because HDF5 falls back to the name index when creation order is not
+  indexed. They agree in both cases, and `list_entries` was iterating directly
+  too, so the description of who used what was also wrong.
+
+  Chasing it did turn up two real bugs, fixed under the same heading:
+  `extract_entries` and `update_entries` treated top-level datasets as
+  entries. Every jrecord file has one — `arfx -x` raised a `TypeError` from
+  inside h5py after walking the log table's rows as channel names, and
+  `arfx -U` wrote entry metadata onto the table. Both now go through
+  `core.entries_by_creation`, which skips non-entries and derives `{index}`
+  the same way everywhere.
 
 ### Robustness
 

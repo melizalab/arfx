@@ -21,7 +21,7 @@ import logging
 import os
 import shutil
 import subprocess
-from collections.abc import Container, Iterable, Sequence
+from collections.abc import Container, Iterable, Iterator, Sequence
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
@@ -61,6 +61,29 @@ def check_file_version(arfp: h5.File) -> None:
         )
     except Warning as e:
         log.warning("warning: %s", e)
+
+
+def entries_by_creation(arfp: h5.File) -> Iterator[tuple[int, str, h5.Group]]:
+    """Yield (index, name, entry) for the entries of an open file, in creation order.
+
+    Top-level datasets are skipped. The specification allows them and writers
+    produce them -- jrecord puts a jill_log table at the root of every file it
+    writes -- but they are not entries, and treating one as an entry made
+    extract_entries iterate its rows as channel names and update_entries write
+    entry metadata onto it.
+
+    The index counts entries only, so it stays dense in a file that has
+    top-level datasets, and every operation derives it the same way, so {index}
+    in a -n template means one thing rather than one thing per subcommand.
+    """
+    index = 0
+    for name in arf.keys_by_creation(arfp):
+        node = arfp[name]
+        if not arf.is_entry(node):
+            log.debug("%s -> skipped (top-level dataset, not an entry)", name)
+            continue
+        yield index, name, node
+        index += 1
 
 
 def entry_repr(entry: h5.Group) -> str:
@@ -341,8 +364,7 @@ def extract_entries(
 
     with arf.open_file(src, "r") as arfp:
         check_file_version(arfp)
-        for index, ename in enumerate(arfp):
-            entry = arfp[ename]
+        for index, ename, entry in entries_by_creation(arfp):
             attrs = dict(entry.attrs)
             # entries written by other tools may have no timestamp; leave the
             # output file's mtime alone rather than passing None to os.utime
@@ -463,9 +485,11 @@ def list_entries(
     with arf.open_file(src, "r") as arfp:
         check_file_version(arfp)
         if entries is None:
-            for name in arfp:
+            # not entries_by_creation: this is the one operation that reports
+            # top-level datasets rather than skipping them
+            for name in arf.keys_by_creation(arfp):
                 entry = arfp[name]
-                if isinstance(entry, h5.Dataset):
+                if not arf.is_entry(entry):
                     print(f"{entry.name}: top-level dataset")
                 elif options.get("verbose", False):
                     print(entry_repr(entry))
@@ -497,10 +521,9 @@ def update_entries(
 
     with arf.open_file(src, "r+") as arfp:
         check_file_version(arfp)
-        for entry_name in arfp:
+        for _index, entry_name, enode in entries_by_creation(arfp):
             entry_name = PurePosixPath(entry_name).name
             if entries is None or entry_name in entries:
-                enode = arfp[entry_name]
                 if verbose:
                     print("vvvvvvvvvv")
                     print(entry_repr(enode))

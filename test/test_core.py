@@ -392,3 +392,67 @@ def test_parse_keyval_round_trips_through_a_file(src_wav_files, tmp_path):
         assert attrs["pen"] == 1
         assert not isinstance(attrs["pen"], (str, bytes))
         assert attrs["bird"] == "C194"
+
+
+# ------------------------------------------------------- top-level datasets
+
+
+@pytest.fixture
+def file_with_toplevel_dataset(src_arf_file):
+    """An arf file carrying a root-level table, as every jrecord file does.
+
+    The spec allows datasets outside any entry, and jill writes a jill_log
+    table at the root of every file. Nothing in arfx's own test data had one,
+    which is why these paths went unexercised.
+    """
+    with arf.open_file(src_arf_file, "r+") as fp:
+        fp.create_dataset("jill_log", data=np.arange(10, dtype="i8"))
+    return src_arf_file
+
+
+def test_extract_skips_a_toplevel_dataset(file_with_toplevel_dataset, tmp_path):
+    # extract_entries treated every root child as an entry, so it walked the
+    # dataset and used its rows as channel names -- a TypeError out of h5py's
+    # selection code, which killed the whole extraction.
+    outdir = tmp_path / "out"
+    outdir.mkdir()
+    core.extract_entries(file_with_toplevel_dataset, directory=outdir)
+    for dset in datasets[:3]:
+        assert (outdir / f"entry_{dset['name']}.wav").exists()
+
+
+def test_update_skips_a_toplevel_dataset(file_with_toplevel_dataset):
+    # quieter than the extract bug and worse: entry metadata was written onto
+    # the log table rather than failing
+    core.update_entries(file_with_toplevel_dataset, None, my_attr="test_value")
+    with arf.open_file(file_with_toplevel_dataset, "r") as fp:
+        assert fp["entry"].attrs["my_attr"] == "test_value"
+        assert "my_attr" not in fp["jill_log"].attrs
+
+
+def test_list_still_reports_a_toplevel_dataset(file_with_toplevel_dataset, capsys):
+    # listing is the one operation that should mention them
+    core.list_entries(file_with_toplevel_dataset)
+    out = capsys.readouterr().out
+    assert "/jill_log: top-level dataset" in out
+    assert "/entry: " in out
+
+
+def test_extract_index_ignores_toplevel_datasets(tmp_path):
+    # {index} counts entries, so a root-level dataset does not consume a number
+    src = tmp_path / "indexed.arf"
+    with arf.open_file(src, "w") as fp:
+        fp.create_dataset("jill_log", data=np.arange(4, dtype="i8"))
+        for i in range(3):
+            entry = arf.create_entry(fp, f"e{i}", 1000 + i)
+            arf.create_dataset(
+                entry, "pcm", np.zeros(100, dtype="h"), sampling_rate=1000
+            )
+    outdir = tmp_path / "out"
+    outdir.mkdir()
+    core.extract_entries(src, directory=outdir, template="{index:02}.wav")
+    assert sorted(p.name for p in outdir.glob("*.wav")) == [
+        "00.wav",
+        "01.wav",
+        "02.wav",
+    ]
