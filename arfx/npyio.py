@@ -11,6 +11,15 @@ from .io import extended_shape
 # unless the maximum header size is explicitly set.
 ARRAY_ALIGN = 2**16
 
+# Header layout for version 1.0 of the npy format: the header length is a
+# little-endian uint16 and the header itself is latin-1. These are fixed by the
+# format specification, not by numpy's implementation, so they are written out
+# here rather than read from numpy.lib.format._header_size_info -- a private
+# mapping that numpy 2.5 removed without offering a public replacement.
+NPY_VERSION = (1, 0)
+NPY_HEADER_LEN_FMT = "<H"
+NPY_HEADER_ENCODING = "latin1"
+
 
 class npyfile:
     """Provides access to sampled data in numpy format
@@ -95,17 +104,16 @@ class npyfile:
 
         import numpy.lib.format as npf
 
-        version = (1, 0)
-        fmt, encoding = npf._header_size_info[version]
-        header = repr(self._write_descr).encode(encoding)
+        fmt = NPY_HEADER_LEN_FMT
+        header = repr(self._write_descr).encode(NPY_HEADER_ENCODING)
         hlen = len(header) + 1
         padlen = ARRAY_ALIGN - (
             (npf.MAGIC_LEN + struct.calcsize(fmt) + hlen) % ARRAY_ALIGN
         )
         try:
-            header_prefix = npf.magic(*version) + struct.pack(fmt, hlen + padlen)
+            header_prefix = npf.magic(*NPY_VERSION) + struct.pack(fmt, hlen + padlen)
         except struct.error as err:
-            msg = f"Header length {hlen} too big for version={version}"
+            msg = f"Header length {hlen} too big for version={NPY_VERSION}"
             raise ValueError(msg) from err
         self.fp.seek(0)
         self.fp.write(header_prefix)

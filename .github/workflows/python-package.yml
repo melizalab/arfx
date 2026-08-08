@@ -6,6 +6,28 @@ on:
       - master
 
 jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        version: "latest"
+        python-version: "3.13"
+    # ruff is pinned in uv.lock, so CI and local development check against the
+    # same version. --only-group dev skips h5py and numpy, which lint does not
+    # need. Neither step depends on the interpreter: ruff's target-version
+    # comes from pyproject.toml.
+    - name: Install ruff
+      run: uv sync --frozen --only-group dev
+    - name: Check lints
+      run: uv run --no-sync ruff check .
+    - name: Check formatting
+      run: uv run --no-sync ruff format --check .
+
   build:
     strategy:
       fail-fast: false

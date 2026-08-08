@@ -115,7 +115,9 @@ class continuous_dset(dataset):
             if len(buf) == 0:
                 return
             data = np.frombuffer(buf, dtype=self.dtype)
-            data.shape = (data.size // self.nchannels, self.nchannels)
+            # reshape rather than assigning to .shape, which numpy 2.5
+            # deprecated; both are views, so nothing is copied
+            data = data.reshape(data.size // self.nchannels, self.nchannels)
             yield offset, data
             offset += data.shape[0]
 

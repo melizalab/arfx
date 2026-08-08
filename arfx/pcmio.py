@@ -143,7 +143,9 @@ class pcmfile:
         if self.nchannels > 1:
             nsamples = (A.size // self.nchannels) * self.nchannels
             A = A[:nsamples]
-            A.shape = (nsamples // self.nchannels, self.nchannels)
+            # reshape rather than assigning to .shape, which numpy 2.5
+            # deprecated; both are views, so nothing is copied
+            A = A.reshape(nsamples // self.nchannels, self.nchannels)
         return A.squeeze()
 
     def write(self, data, scale=True):

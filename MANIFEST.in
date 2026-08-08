@@ -1,2 +1,2 @@
-include README.md COPYING
-recursive-include src *
+include README.rst COPYING
+

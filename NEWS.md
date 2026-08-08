@@ -45,6 +45,17 @@ Requires `arf>=2.7.4`, which carries fixes this release depends on.
 - An inconsistent file now exits non-zero with the diagnostic that had already
   been logged, instead of raising `TypeError` over the top of it.
 
+### npy files
+
+- Reading or writing a `.npy` file raised `AttributeError` under numpy 2.5.
+  `npyio` obtained the npy v1.0 header layout from
+  `numpy.lib.format._header_size_info`, a private mapping numpy 2.5 removed
+  with no public replacement. The layout is fixed by the format specification,
+  so it is now written out directly. arfx declares no numpy constraint, so any
+  fresh install picks up numpy 2.5 and hit this.
+- Two internal `array.shape = ...` assignments, deprecated in numpy 2.5, are
+  now `reshape` calls. No behavior change; both were already views.
+
 ### arfx-split
 
 - No longer writes a trailing entry containing zero samples when the recording
