@@ -40,7 +40,25 @@ def run_split(tgt, *srcs, **kwargs):
 # --------------------------------------------------------------- entry helpers
 
 
-def test_entry_duration_uses_longest_sampled_dataset(tmp_path):
+def one_entry_run(entry):
+    """The run a single unspliced entry forms, as find_runs would build it"""
+    return [splitter.Piece(entry, tstamp, 0)]
+
+
+def run_spans(run):
+    entry = run[0].entry
+    spans = {
+        name: splitter.run_pieces(run, name)
+        for name in splitter.sampled_datasets(entry)
+    }
+    totals = {
+        name: sum(dset.shape[0] - skip for dset, skip in pieces)
+        for name, pieces in spans.items()
+    }
+    return spans, totals
+
+
+def test_run_duration_uses_longest_sampled_dataset(tmp_path):
     path = tmp_path / "d.arf"
     with arf.open_file(path, "w") as fp:
         entry = arf.create_entry(fp, "entry", tstamp)
@@ -52,15 +70,19 @@ def test_entry_duration_uses_longest_sampled_dataset(tmp_path):
         )
         # event data must not count toward the duration
         arf.create_dataset(entry, "spikes", np.arange(99999.0), units="s")
-        assert splitter.entry_duration(entry) == 4.0
+        spans, totals = run_spans(one_entry_run(entry))
+        assert splitter.run_duration(spans, totals) == 4.0
 
 
-def test_entry_duration_of_entry_with_no_sampled_data(tmp_path):
+def test_run_duration_of_entry_with_no_sampled_data(tmp_path):
     path = tmp_path / "d.arf"
     with arf.open_file(path, "w") as fp:
         entry = arf.create_entry(fp, "entry", tstamp)
         arf.create_dataset(entry, "spikes", np.arange(10.0), units="s")
-        assert splitter.entry_duration(entry) == 0
+        spans, totals = run_spans(one_entry_run(entry))
+        assert splitter.run_duration(spans, totals) == 0
+        # and it still gets a chunk, so its attributes survive the split
+        assert splitter.run_chunk_count(totals, {}) == 1
 
 
 def test_entry_timestamps_skips_non_groups(tmp_path):
@@ -301,3 +323,175 @@ def test_dry_run_writes_nothing(tmp_path):
     tgt = tmp_path / "out.arf"
     splitter.main(["--dry-run", "--duration", "2.0", str(src), str(tgt)])
     assert not tgt.exists()
+
+
+# ------------------------------------------------------------------ splicing
+
+
+def make_contiguous_file(path, *, lengths, first_frame=0, gaps=None, rate=1000):
+    """A file whose entries abut on the sample timeline, as a recorder writes them.
+
+    `gaps` gives the signed sample distance between consecutive entries: 0 for
+    contiguous (the default), negative for an overlap, positive for a real gap.
+    The data are one continuous ramp across the whole recording, so a spliced
+    result can be checked against `numpy.arange` and any misplaced sample shows
+    up as a discontinuity.
+    """
+    gaps = gaps or [0] * (len(lengths) - 1)
+    frame = first_frame
+    position = 0
+    with arf.open_file(path, "w") as fp:
+        for i, length in enumerate(lengths):
+            entry = arf.create_entry(
+                fp,
+                f"e{i:03}",
+                tstamp + position / rate,
+                jack_frame=np.uint32(frame % (2**32)),
+                jack_sampling_rate=np.uint32(rate),
+            )
+            arf.create_dataset(
+                entry,
+                "pcm",
+                np.arange(position, position + length, dtype="i4"),
+                sampling_rate=rate,
+            )
+            if i < len(lengths) - 1:
+                frame = (frame + length + gaps[i]) % (2**32)
+                position += length + gaps[i]
+    return path
+
+
+def spliced(tgt):
+    with arf.open_file(tgt, "r") as fp:
+        names = [n for n in arf.keys_by_creation(fp) if arf.is_entry(fp[n])]
+        return [fp[n]["pcm"][:] for n in names]
+
+
+def test_contiguous_entries_are_spliced_into_full_chunks(tmp_path):
+    # three 1000-sample entries abutting exactly, chunked at 1.5 s = 1500
+    # samples. Without splicing each entry chunks separately and the output is
+    # 1000/1000/1000; spliced it is one 3000-sample stream cut at 1500.
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000, 1000])
+    chunks = spliced(run_split(tmp_path / "t.arf", src, duration=1.5))
+    assert [len(c) for c in chunks] == [1500, 1500]
+    assert np.array_equal(np.concatenate(chunks), np.arange(3000))
+
+
+def test_no_splice_restores_per_entry_chunking(tmp_path):
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000, 1000])
+    tgt = tmp_path / "t.arf"
+    splitter.main(["--no-splice", "--duration", "1.5", str(src), str(tgt)])
+    assert [len(c) for c in spliced(tgt)] == [1000, 1000, 1000]
+
+
+def test_a_gap_breaks_the_run(tmp_path):
+    # the second entry starts 500 samples after the first ends, so the two are
+    # separate recordings and must not be joined
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000], gaps=[500])
+    chunks = spliced(run_split(tmp_path / "t.arf", src, duration=1.5))
+    assert [len(c) for c in chunks] == [1000, 1000]
+
+
+def test_overlapping_entries_are_spliced_without_duplicating_samples(tmp_path):
+    # the second entry repeats the last 200 samples of the first
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000], gaps=[-200])
+    chunks = spliced(run_split(tmp_path / "t.arf", src, duration=10))
+    assert len(chunks) == 1
+    # 1000 + 1000 - 200 duplicated, and still a single unbroken ramp
+    assert np.array_equal(chunks[0], np.arange(1800))
+
+
+def test_overlap_beyond_the_limit_is_not_spliced(tmp_path):
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000], gaps=[-200])
+    tgt = tmp_path / "t.arf"
+    splitter.main(["--max-overlap", "100", "--duration", "10", str(src), str(tgt)])
+    assert [len(c) for c in spliced(tgt)] == [1000, 1000]
+
+
+def test_overlap_with_mismatched_data_is_refused(tmp_path, caplog):
+    # the frame counter claims an overlap but the samples there disagree, so
+    # the counter and the data cannot both be right
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000], gaps=[-200])
+    with arf.open_file(src, "r+") as fp:
+        fp["e001"]["pcm"][:200] = -1
+    chunks = spliced(run_split(tmp_path / "t.arf", src, duration=10))
+    assert "data there differ" in caplog.text
+    assert [len(c) for c in chunks] == [1000, 1000]
+
+
+def test_splicing_across_the_frame_counter_wrap(tmp_path):
+    # jack_frame is a uint32, and at 44.1 kHz it wraps about every 27 hours --
+    # which is why a long recording gets broken into entries at all. An entry
+    # starting just after the wrap must still read as contiguous.
+    src = make_contiguous_file(
+        tmp_path / "a.arf", lengths=[1000, 1000], first_frame=2**32 - 500
+    )
+    with arf.open_file(src, "r") as fp:
+        # the second entry really did wrap round
+        assert fp["e001"].attrs["jack_frame"] < fp["e000"].attrs["jack_frame"]
+    chunks = spliced(run_split(tmp_path / "t.arf", src, duration=10))
+    assert len(chunks) == 1
+    assert np.array_equal(chunks[0], np.arange(2000))
+
+
+def test_entries_are_spliced_across_source_files(tmp_path):
+    # the recording continues in a second file, which is the case the issue
+    # names: entries are sorted by timestamp before the run is assembled
+    a = make_contiguous_file(tmp_path / "a.arf", lengths=[1000])
+    b = make_contiguous_file(tmp_path / "b.arf", lengths=[1000], first_frame=1000)
+    with arf.open_file(b, "r+") as fp:
+        fp["e000"].attrs["timestamp"] = arf.convert_timestamp(tstamp + 1.0)
+        fp["e000"]["pcm"][:] = np.arange(1000, 2000)
+    chunks = spliced(run_split(tmp_path / "t.arf", a, b, duration=10))
+    assert len(chunks) == 1
+    assert np.array_equal(chunks[0], np.arange(2000))
+
+
+def test_entries_without_a_frame_attribute_are_never_spliced(tmp_path):
+    # make_sampled_file writes no jack_frame, so there is nothing to decide
+    # contiguity from and every entry stays its own run
+    src = make_sampled_file(tmp_path / "a.arf", nentries=2)
+    tgt = run_split(tmp_path / "t.arf", src, duration=10)
+    with arf.open_file(tgt, "r") as fp:
+        entries = [n for n in arf.keys_by_creation(fp) if arf.is_entry(fp[n])]
+        assert len(entries) == 2
+        assert all(fp[n][CHANNELS[0]].shape[0] == 5000 for n in entries)
+
+
+def test_frame_attribute_advances_with_the_chunk(tmp_path):
+    # every chunk used to inherit the source entry's frame counter, so they all
+    # claimed the same start and this script's own output could not be spliced
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[3000], first_frame=1000)
+    tgt = run_split(tmp_path / "t.arf", src, duration=1.0)
+    with arf.open_file(tgt, "r") as fp:
+        frames = [
+            int(fp[n].attrs["jack_frame"])
+            for n in arf.keys_by_creation(fp)
+            if arf.is_entry(fp[n])
+        ]
+    assert frames == [1000, 2000, 3000]
+
+
+def test_split_output_can_be_spliced_again(tmp_path):
+    # the round trip the issue asks for: split a recording, then re-chunk the
+    # result at a different duration and get the same samples back
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[6000], first_frame=7)
+    once = run_split(tmp_path / "once.arf", src, duration=1.0)
+    assert len(spliced(once)) == 6
+    twice = run_split(tmp_path / "twice.arf", once, duration=3.0)
+    chunks = spliced(twice)
+    assert [len(c) for c in chunks] == [3000, 3000]
+    assert np.array_equal(np.concatenate(chunks), np.arange(6000))
+
+
+def test_origin_entry_names_the_entry_a_chunk_starts_in(tmp_path):
+    src = make_contiguous_file(tmp_path / "a.arf", lengths=[1000, 1000])
+    tgt = run_split(tmp_path / "t.arf", src, duration=1.5)
+    with arf.open_file(tgt, "r") as fp:
+        origins = [
+            fp[n].attrs["origin-entry"]
+            for n in arf.keys_by_creation(fp)
+            if arf.is_entry(fp[n])
+        ]
+    # [0:1500) starts in e000; [1500:2000) starts in e001
+    assert origins == ["e000", "e001"]

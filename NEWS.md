@@ -46,6 +46,29 @@ release.
   names were reproducible.
 - `-n/--template` is removed. It was accepted and never read.
 
+### arfx-split
+
+- Entries that are contiguous on the sample timeline are now spliced back
+  together before chunking (#43), so a recording the recorder broke into pieces
+  — or that an earlier `arfx-split` run chunked — is re-chunked as one
+  continuous stream instead of inheriting the old boundaries. Runs are assembled
+  after entries are sorted by timestamp, so a recording continuing into another
+  file splices too. `--no-splice` restores the previous behavior.
+- Contiguity is decided from a frame counter on each entry, `jack_frame` by
+  default and settable with `--frame-attr`; entries without it are never
+  spliced. The counter is a uint32 that wraps about every 27 hours at 44.1 kHz
+  — one of the reasons a long recording ends up split in the first place — and
+  the comparison is done modulo that wrap.
+- Entries that overlap by up to `--max-overlap` samples (default 4096) are
+  spliced with the duplicates dropped. The overlapping samples are compared
+  first; if the two entries disagree about the data they share, the frame
+  counter and the data cannot both be right, so they are left unspliced and
+  reported.
+- The frame counter on each output entry now advances with the chunk. Every
+  chunk used to inherit the source entry's value, so they all claimed to start
+  at the same sample, and `arfx-split` output could not be spliced by a later
+  run — half of what #43 asks for.
+
 ### arfx-collect-sampled
 
 - `--start` and `--stop` now cut at the sample they name. They were applied a

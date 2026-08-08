@@ -149,10 +149,18 @@ arfx-split
 
 This script is used to reorganize very large recordings, possibly
 contained in multiple files, into manageable chunks. Each new entry is
-given an updated timestamp and attributes from the source entries.
-Currently, no effort is made to splice data across entries or files.
-This may result in some short entries. Only sampled datasets are
-processed.
+given an updated timestamp and attributes from the source entries. Only
+sampled datasets are processed.
+
+Entries that are contiguous on the sample timeline will be spliced back together
+before chunking as long as there some internal track of the sample count, such as the ``jack_frame`` attribute recorded by ``jrecord``. This is an unsigned 32-bit value that wraps roughly every 27 hours at typical audio sampling rates, triggering the start of a new entry in the ARF file.
+
+-  **--no-splice:** chunk each source entry separately, as before
+-  **--frame-attr NAME:** use a different attribute as the frame counter
+-  **--max-overlap SAMPLES:** splice entries that overlap by up to this many
+   samples, dropping the duplicates (default 4096). The overlapping samples are
+   compared first, and entries whose data disagree there are left unspliced and
+   reported, since the counter and the data cannot both be right.
 
 arfx-oephys
 ~~~~~~~~~~~
