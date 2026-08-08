@@ -74,15 +74,22 @@ def marked_file(tmp_path):
     return path
 
 
-@pytest.fixture
-def jrecord_file(tmp_path):
-    """A marked dataset with jrecord's non-conforming scalar units attribute."""
+@pytest.fixture(params=["str", "bytes"], ids=["units-str", "units-bytes"])
+def jrecord_file(request, tmp_path):
+    """A marked dataset with jrecord's non-conforming scalar units attribute.
+
+    jill writes these with the C++ library, which stores strings fixed-length,
+    so h5py hands the attribute back as np.bytes_ -- that is what a real file
+    looks like. The str form is covered too, since a vlen writer would produce
+    it and the two take different branches of the isinstance check.
+    """
     path = tmp_path / "jrecord.arf"
+    scalar = "samples" if request.param == "str" else np.bytes_(b"samples")
     with arf.open_file(path, "w") as fp:
         entry = arf.create_entry(fp, "entry", 1000)
         dset = add_marked(entry, (b"samples", b""))
         del dset.attrs["units"]
-        dset.attrs["units"] = "samples"
+        dset.attrs["units"] = scalar
     return path
 
 
@@ -232,24 +239,25 @@ def test_conforming_marked_units_round_trip(tmp_path, marked_file):
         assert events["name"].tolist() == [b"b"]
 
 
-def test_malformed_units_on_marked_dataset_raises(tmp_path, jrecord_file):
-    # CHARACTERIZATION: this is an arf 2.7.3 regression, not an arfx bug, and it
-    # breaks the one input select.py's units workaround was written to handle.
-    #
-    # arf._sample_timebase looks up the unit for the 'start' field with
-    # units[names.index("start")]. For jrecord's scalar "samples" that indexes
-    # the *string*, yielding "s", so the dataset is not recognized as being on a
-    # sample timebase. `begin` is then left as a float, and rebasing the int64
-    # start times with `data["start"] -= begin` fails the same-kind cast.
-    #
-    # Under 2.7.2 the conversion was unconditional whenever sampling_rate was
-    # present, so begin was always an int and this path worked. The fix belongs
-    # in arf: treat a scalar units attribute on a compound dataset as malformed
-    # rather than indexing into it.
-    with pytest.raises(TypeError, match="same_kind"):
-        run_select(
-            tmp_path, jrecord_file, [{"entry": "entry", "begin": 0.0, "end": 1.0}]
-        )
+def test_malformed_units_on_marked_dataset_is_repaired(tmp_path, jrecord_file):
+    # jrecord writes a single scalar where the spec wants one unit per compound
+    # field. select.py pads it out to the field count so the data can be
+    # written back; arf, for its part, has to recognize the scalar as naming
+    # the timebase of the 'start' field rather than indexing into the string
+    # (which yielded "s" from "samples" and silently lost the sample timebase,
+    # leaving `begin` a float that could not be subtracted from integer start
+    # times). That half was fixed in arf 2.7.4.
+    tgt = run_select(
+        tmp_path, jrecord_file, [{"entry": "entry", "begin": 0.0, "end": 1.0}]
+    )
+    with arf.open_file(tgt, "r") as fp:
+        events = fp["entry_00000"]["events"]
+        units = events.attrs["units"]
+        assert len(units) == 2
+        assert units[0] in ("samples", b"samples")
+        # the window is [0, 1) s at 1000 Hz, so only the record at 500 survives
+        assert events["start"].tolist() == [500]
+        assert events.attrs["offset"] == 0
 
 
 def test_preserve_marked_copies_without_selecting(tmp_path, marked_file):

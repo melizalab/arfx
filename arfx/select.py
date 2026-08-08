@@ -104,19 +104,32 @@ def main(argv=None):
                         tgt_file.copy(src_dset, tgt_entry, name=name)
                         continue
                     else:
-                        # The spec requires one unit per compound field, but
-                        # jrecord writes a single scalar, so pad that out.
-                        # Either way the result has to be handed back as a
-                        # list: h5py returns the attribute as an ndarray, and
+                        # The spec requires one unit per compound field. The
+                        # result is always handed back as a list, because h5py
+                        # returns the attribute as an ndarray while
                         # create_dataset tests it with isinstance(list, tuple).
-                        # This block used to pop the attribute and put it back
-                        # only in the scalar case, which made every conforming
-                        # marked dataset fail for want of any units at all.
+                        # Need to make sure we handle conforming datasets and
+                        # some non-conforming ones from older versions of jrecord.
                         src_units = src_dset_attrs.get("units", "")
                         req = len(src_dset.dtype.names)
-                        if isinstance(src_units, str | bytes) or len(src_units) != req:
-                            src_units = [src_units] + [b""] * (req - 1)
-                        src_dset_attrs["units"] = list(src_units)
+                        if isinstance(src_units, str | bytes):
+                            # older versions of jrecord write one scalar for
+                            # the whole record, which describes the 'start'
+                            # field
+                            src_units = [src_units]
+                        else:
+                            src_units = list(src_units)
+                        if len(src_units) != req:
+                            # pad (or truncate) to one unit per field. The
+                            # filler has to match the string type already
+                            # present: h5py refuses a mixed str/bytes sequence.
+                            filler = (
+                                ""
+                                if src_units and isinstance(src_units[0], str)
+                                else b""
+                            )
+                            src_units = (src_units + [filler] * req)[:req]
+                        src_dset_attrs["units"] = src_units
                 selected, offset = arf.select_interval(
                     src_dset, interval["begin"], interval["end"]
                 )

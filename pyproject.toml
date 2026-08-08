@@ -32,7 +32,7 @@ classifiers = [
     "Natural Language :: English"
 ]
 dependencies = [
-    "arf>=2.7.3",
+    "arf>=2.7.4",
     "ewave>=1.0.7",
     "tqdm",
     "natsort",
