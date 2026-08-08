@@ -1,8 +1,8 @@
 # -*- mode: python -*-
 """Script for converting open-ephys data in the raw binary format to ARF
 
-This interface is based on the (2020-09-29) specification at
-https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+format
+This interface is based on the specification at
+https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+format (for old and new formats) and on direct inspection of the output from pre and post 0.6 versions of the open-ephys GUI
 
 """
 
@@ -183,9 +183,9 @@ class recording:
     """Represents the contents of a single open-ephys recording session.
 
     Each recording session (`experimentN/recordingM`) in the open-ephys
-    hierarchy corresponds to a single ARF entry. The interface attempts to mimic the
-    h5py/ARF API as much as possible, with datasets accessed like dictionary elements.
-    Loading data from disk is lazy.
+    hierarchy corresponds to a single ARF entry. The interface attempts to mimic
+    the h5py/ARF API as much as possible, with datasets accessed like dictionary
+    elements. Loading data from disk is lazy.
 
     """
 
@@ -243,9 +243,11 @@ _SYNC_RX = re.compile(
 def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | None:
     """Look up the start sample for a processor in sync_messages.txt.
 
-    Takes the whole continuous-processor structure rather than individual
-    fields, because which fields identify a stream depends on the GUI version.
-    Returns None if there is no matching line.
+    This file is used as a fallback if the sample times file is missing. Takes
+    the whole continuous-processor structure rather than individual fields,
+    because which fields identify a stream depends on the GUI version. Returns
+    None if there is no matching line.
+
     """
     if gui_version < Version("0.6.0"):
         rx = _SYNC_RX_LEGACY

@@ -493,7 +493,7 @@ def test_check_file_version_floor_is_one_one(tmp_path):
     # hard-coded as [1.1, 3.0). In 3.0 it becomes derived -- [min_spec_version,
     # next major after spec_version), i.e. [2.0, 3.0) -- so a 1.x file that is
     # accepted here will start raising DeprecationWarning. arfx has no migration
-    # path for those files beyond migrate.py, which is not wired to a script.
+    # path for such files at all now that the python 2 migrate module is gone.
     path = _versioned_file(tmp_path / "old.arf", arf_version="1.5")
     with h5.File(path, "r") as fp:
         assert arf.check_file_version(fp) == Version("1.5")

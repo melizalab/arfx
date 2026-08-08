@@ -754,8 +754,10 @@ def arfx(argv=None):
         entries = opts.pop("entries") or None
         args.op(args.arffile, entries, **opts)
     except DeprecationWarning as e:
+        # nothing in this package can convert such a file any more; the old
+        # migrate module was python 2 code and has been removed
         print(f"[arfx] error: {e}")
-        print(f"      use arfx-migrate to convert to version {arf.spec_version}")
+        print(f"      this file is older than the {arf.spec_version} spec")
         p.exit(-1)
     except (ValueError, FileNotFoundError) as err:
         p.error(f"[arfx] error: {err}")
