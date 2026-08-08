@@ -4,73 +4,46 @@ Working notes from the 2.8.1 audit. Everything fixed in that release is
 described in `NEWS.md`; this file records what was deliberately left alone and
 what the next major version has to deal with.
 
-## Deferred to the next major version
+## Deferred from 2.8.1 — all resolved in 3.0.0
 
-All of these change observable behavior, which is why they were kept out of a
-patch release. Each is reachable from real input unless noted.
+These changed observable behavior, which is why they were kept out of a patch
+release. `NEWS.md` describes what each one became. Two are worth keeping a
+record of here, because what was found was not what was written down.
 
-### Ordering and naming
-
-- **`oephys` entry names embed the absolute source path.** The name is
-  `str(dir).replace("/", "_")`, so importing the same recording from two
-  machines, or from a different mount point, produces different entry names for
-  identical data. Something derived from the recording directory and the
-  experiment/recording indices would be reproducible. Changing it renames
-  entries in new archives, so it needs a deliberate release.
-
-- ~~**`extract_entries` iterates the file directly while `list_entries` and
-  `collect` use `keys_by_creation`.**~~ The divergence claimed here does not
-  exist. Measured both ways: on a file written by `arf.open_file` direct
+- **The `extract_entries` / `list_entries` ordering divergence does not
+  exist.** Measured both ways: on a file written by `arf.open_file`, direct
   iteration and `keys_by_creation` both give creation order, because h5py
   honours the tracking flag; on an untracked file both give name order,
-  because HDF5 falls back to the name index when creation order is not
-  indexed. They agree in both cases, and `list_entries` was iterating directly
-  too, so the description of who used what was also wrong.
+  because HDF5 falls back to the name index. They agree in both cases, and
+  `list_entries` was iterating directly too, so the note was wrong about who
+  used what as well.
 
-  Chasing it did turn up two real bugs, fixed under the same heading:
-  `extract_entries` and `update_entries` treated top-level datasets as
-  entries. Every jrecord file has one — `arfx -x` raised a `TypeError` from
-  inside h5py after walking the log table's rows as channel names, and
-  `arfx -U` wrote entry metadata onto the table. Both now go through
-  `core.entries_by_creation`, which skips non-entries and derives `{index}`
-  the same way everywhere.
+  Chasing it did turn up two real bugs. `extract_entries` and `update_entries`
+  treated top-level datasets as entries, and every jrecord file has one:
+  `arfx -x` raised a `TypeError` from inside h5py after walking the log
+  table's rows as channel names, and `arfx -U` wrote entry metadata onto the
+  table. Both now go through `core.entries_by_creation`.
 
-### Robustness
+- **`io.py`'s dead code was hiding a live bug.** Removing the unreachable
+  python < 3.10 shims meant looking at the `try` around them, which wrapped the
+  handler's construction as well as the entry-point lookup — so a `ValueError`
+  a handler raised for its own reasons came back as "No handler defined for
+  files of type '.dat'", pointing away from the actual problem.
 
-- **`core.ParseKeyVal` does no type coercion.** `-k pen=1` is stored and read
-  back as the string `"1"`. Numeric metadata cannot be round-tripped through
-  the command line. Fixing it changes the dtype of attributes in new files.
-
-- **`select.py` calls `arf.create_entry(tgt, name, **src_entry_attrs)`.** This
-  satisfies the positional `timestamp` parameter only because `timestamp`
-  happens to be among the source attributes, and it feeds an already-converted
-  int64 pair back through `convert_timestamp`. An entry with no timestamp
-  raises `TypeError` on a missing argument.
-
-- **`collect.first` returns `None` and `collect.all_items_equal` returns `True`
-  for an empty dict.** If no channel matches the filter, the sampling rate
-  becomes `None` and is passed to the output writer rather than being reported
-  as "no channels selected".
-
-- **`collect`'s `--start` and `--stop` are applied per chunk, not per sample.**
-  The cutoff is the first chunk boundary at or past the requested count, so the
-  output is longer than asked for by up to one chunk. `--start` also uses
-  `sample_count > args.start`, which drops the chunk containing the requested
-  start.
-
-### Dead code
-
-- **`io.py`**: `_get_handler_class` is never called, and the `TypeError`
-  "shim for python < 3.10" branches in `open` and `list_plugins` cannot be
-  reached under `requires-python = ">=3.11"`.
+The lesson both times: verify the finding before fixing it. A stale note is
+worth as much as an accurate one only if someone checks.
 
 ## Suggested upstream, in arf
 
-- **`create_dataset` accepts only `list` or `tuple` for a compound dataset's
-  `units`.** h5py returns the attribute as an ndarray, so a units attribute
-  cannot survive a read-modify-write round trip without an explicit conversion.
-  `select.py` converts locally; accepting any sequence would match the tolerant
-  reader principle applied elsewhere in arf.
+- ~~**`create_dataset` accepts only `list` or `tuple` for a compound dataset's
+  `units`.**~~ Fixed in arf 3.0.0, which tests the argument structurally. Half
+  of `select.py`'s workaround went away with it.
+
+- **`check_file_version`'s `DeprecationWarning` says "The arfx package ships a
+  script that upgrades old files".** It has not since arfx 2.8.1, when the
+  python 2 `migrate` module was removed, and arfx prints that sentence to its
+  own users. `core.check_file_version` appends a correction, but the message
+  wants fixing at the source.
 
 ## The arf 3.0 bump, as it actually went
 

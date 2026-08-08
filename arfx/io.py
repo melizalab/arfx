@@ -32,28 +32,20 @@ def open(filename: str | Path, *args, **kwargs):
 
     """
     ext = Path(filename).suffix.lower()
+    # only the lookup is guarded. Wrapping the handler's construction too meant
+    # a ValueError it raised for its own reasons -- an invalid mode, say -- was
+    # reported as there being no handler for the extension, which is both wrong
+    # and the opposite of the actual problem
     try:
         (ep,) = entry_points(group=_entrypoint, name=ext)
-        cls = ep.load()
-        return cls(filename, *args, **kwargs)
     except ValueError:
         raise ValueError(f"No handler defined for files of type '{ext}'") from None
-    except TypeError:
-        # shim for python < 3.10
-        for ep in entry_points().get(_entrypoint, []):
-            if ep.name == ext:
-                cls = ep.load()
-                return cls(filename, *args, **kwargs)
-        raise ValueError(f"No handler defined for files of type '{ext}'") from None
+    return ep.load()(filename, *args, **kwargs)
 
 
-def list_plugins() -> str:
-    """Returns a string listing plugins registered to the arfx.io entry point"""
-    try:
-        eps = entry_points(group=_entrypoint)
-    except TypeError:
-        eps = entry_points().get(_entrypoint, [])
-    return [ep.name for ep in eps]
+def list_plugins() -> list[str]:
+    """Returns the names of plugins registered to the arfx.io entry point"""
+    return [ep.name for ep in entry_points(group=_entrypoint)]
 
 
 def is_appendable(shape1, shape2):
@@ -80,25 +72,6 @@ def extended_shape(shape1, shape2):
             raise ValueError(
                 "data shape is not compatible with previously written data"
             )
-
-
-def _get_handler_class(extension: str) -> type | None:
-    """Get the (first) handler class for a given file extension.
-
-    Args:
-        extension: The file extension including the dot (e.g., '.txt')
-
-    Returns:
-        The handler class if found, None otherwise
-    """
-    # entry_points() accepts a group parameter in newer versions
-    eps = entry_points()
-    if hasattr(eps, "select"):  # Python 3.10+ style
-        matching_eps = eps.select(group=_entrypoint, name=extension)
-    else:  # Older style
-        matching_eps = [ep for ep in eps.get(_entrypoint, []) if ep.name == extension]
-
-    return matching_eps[0].load() if matching_eps else None
 
 
 # Variables:
