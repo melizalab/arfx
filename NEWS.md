@@ -1,5 +1,95 @@
 # Release notes
 
+## 3.0.0
+
+Requires `arf>=3.0.0,<4`. The major version is the dependency: arfx's major
+version now tracks the arf **library** major version it requires.
+
+The arf bump itself changed no arfx behavior — the boundary suite in
+`test/test_arf_api.py` was written to produce a diff rather than a guess, and
+it did: five failures, every one of them a test written in advance to fire on
+this bump, and nothing else in the suite moved. What follows is the behavior
+that was deliberately held back from 2.8.1 because it could not go in a patch
+release.
+
+### arfx
+
+- `-k key=value` values are now typed. The value is read as JSON if it parses
+  as JSON, and taken as a plain string if it does not, so `-k pen=1` stores a
+  number where it used to store `"1"`. Numeric metadata could not previously
+  be round-tripped through the command line at all. `-k bird=C194` and
+  `-k date=2026-08-08` are unaffected, and neither is `-k box=007`, since JSON
+  rejects a leading zero — a padded identifier stays a string. Quote a value to
+  force it: `-k animal='"397"'`. A key and value now split on the first `=`, so
+  a value may contain one, and a malformed argument is a CLI error rather than
+  a traceback.
+- `-x` and `-U` no longer treat a top-level dataset as an entry. The
+  specification allows datasets outside any entry and jill writes a `jill_log`
+  table at the root of every file, so this was reachable from any jrecord
+  recording: `-x` raised `TypeError` from inside h5py after walking the log
+  table's rows as channel names, and `-U` wrote entry metadata onto the table.
+  `{index}` in a `-n` template now counts entries only.
+- An entry name containing `/` is rejected with a CLI error instead of quietly
+  creating a nested group. Reachable from a `-n` template.
+
+### arfx-oephys
+
+- Entry names are now derived from the recording rather than from the path to
+  it. The name was the full source path with separators replaced, so the same
+  recording imported from a different working directory, machine or mount point
+  produced a different entry name for identical data, and two archives of one
+  recording could not be merged without duplicates. The name is now the session
+  directory plus the components below it. **This renames entries in new
+  archives**; existing files are untouched.
+- A recording that is already in the target file is logged and skipped instead
+  of raising `ValueError` from h5py. This case only became detectable once the
+  names were reproducible.
+- `-n/--template` is removed. It was accepted and never read.
+
+### arfx-collect-sampled
+
+- `--start` and `--stop` now cut at the sample they name. They were applied a
+  chunk at a time: `--start` compared the sample count *before* the current
+  chunk, so the chunk containing the requested sample was dropped whole — with
+  the default chunk size, `--start 100` discarded several thousand samples —
+  and `--stop` ran to the first chunk boundary at or past the request. A chunk
+  boundary is an artifact of how h5py stored the dataset and should not be
+  visible in the output.
+- An empty channel selection is now an error naming the channels that could not
+  be found. It used to pass silently: the sampling rate and dtype reached the
+  output writer as `None` and produced a file with no channels.
+
+### arfx-select
+
+- Each selected interval gets its own `uuid`, and the source entry's name is
+  recorded in a `source_entry` attribute. The source attributes were passed
+  straight to `arf.create_entry`, so every interval cut from an entry inherited
+  that entry's identity — two intervals from one source entry produced two
+  entries in the output carrying one uuid, which is the case the attribute
+  exists to distinguish.
+- An entry with no `timestamp` is logged and skipped rather than raising
+  `TypeError` and killing the whole run.
+- A conforming `units` attribute is now passed through unchanged, which
+  preserves its HDF5 type. arf 3.0 accepts any sequence, so only the padding
+  path for jrecord's non-conforming scalar still rebuilds it.
+
+### Library
+
+- `arfx.io.open` no longer disguises an error raised by a handler. The guard
+  covered the handler's construction as well as the entry-point lookup, so
+  `io.open("x.dat", mode="q")` reported `No handler defined for files of type
+  '.dat'` — pointing away from the actual complaint, which was about the mode.
+- `arfx.io.list_plugins` was annotated `-> str` while returning a list.
+- Removed: `io._get_handler_class`, never called, and the "shim for python <
+  3.10" branches in `io.open` and `io.list_plugins`, unreachable under
+  `requires-python = ">=3.11"`.
+
+### Packaging
+
+- `arf>=3.0.0,<4`. The upper bound is deliberate: a major arf bump is exactly
+  when `test/test_arf_api.py` needs running, so it should not arrive through a
+  non-frozen install.
+
 ## 2.8.1
 
 A bug-fix release. Two of the scripts did not work on their primary inputs, and

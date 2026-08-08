@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arfx"
-version = "2.8.1"
+version = "3.0.0"
 description = "Advanced Recording Format Tools"
 readme = "README.rst"
 requires-python = ">=3.11"
@@ -103,7 +103,9 @@ ignore_missing_imports = true
 strict_optional = true
 check_untyped_defs = true
 
-[tool.hatch.build]
-include = ["arfx/**"]
+[tool.hatch.build.targets.wheel]
+packages = ["arfx"]
+
+[tool.hatch.build.targets.sdist]
+include = ["arfx/**", "README.rst", "COPYING", "NEWS.md"]
 exclude = ["*test*"]
-artifacts = ["README.rst"]

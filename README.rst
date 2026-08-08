@@ -157,7 +157,7 @@ processed.
 arfx-oephys
 ~~~~~~~~~~~
 
-Converts the output of an `open-ephys <https://open-ephys.org/>`_ recording into an ARF file. open-ephys stores its data in a big complex directory tree, which this script will navigate and store in an appropriately timestamped entry in the ARF file. Has not been tested with data from outside our lab. Example invocation::
+Converts the output of an `open-ephys <https://open-ephys.org/>`_ recording (open-ephys binary format) into an ARF file. open-ephys stores its data in a big complex directory tree, which this script will navigate and store in an appropriately timestamped entry in the ARF file. Has not been tested with data from outside our lab. Example invocation::
 
    arfx-oephys -T EXTRAC_HP -k experimenter=smm3rc -k bird=C194 -k pen=1 -k site=1 -k protocol=chorus -f C194_1_1.arf C194_2023-10-16_16-30-54_chorus/
 
@@ -235,5 +235,13 @@ Default is 0, and **arfx** will not attempt to change the property if
 version information
 -------------------
 
-**arfx** uses semantic versioning and is synchronized with the
-major/minor version numbers of the arf package specification.
+**arfx** uses semantic versioning. Its major version tracks the major version
+of the `arf <https://github.com/melizalab/arf>`_ *library* it requires, so
+**arfx** 3.x requires ``arf>=3.0.0,<4``.
+
+That is not the same as the version of the ARF specification. The arf library
+versions independently of the format it implements — arf 3.0.0 ships against
+specification 2.2 — so neither number can be derived from the other. The
+specification version a file claims is stored in its ``arf_version`` attribute,
+and ``arf.supported_spec_versions()`` reports the range the installed library
+will read.
