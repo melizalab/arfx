@@ -155,10 +155,17 @@ def test_session_with_several_recordings_round_trips(tmp_path, tmp_path_factory)
     # having different ones purely because one was shorter.
     archive = tmp_path / "session.arf"
     originals = []
-    for name, nsamples in (("r1", 600), ("r2", 400)):
+    for name, nsamples, session in (
+        ("r1", 600, "P397_2026-06-17_11-08-34_arc6-main"),
+        ("r2", 400, "P397_2026-06-17_12-15-00_arc6-main"),
+    ):
         data = pipeline_data(nsamples=nsamples)
         tree = build_tree(
-            tmp_path_factory.mktemp(name), NEW, nchannels=NCHANNELS, data=data
+            tmp_path_factory.mktemp(name),
+            NEW,
+            nchannels=NCHANNELS,
+            data=data,
+            session=session,
         )
         run_oephys(archive, tree)
         originals.append(data)

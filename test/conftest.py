@@ -265,18 +265,23 @@ def build_tree(
     events="string",
     spikes=False,
     channel_metadata_count=None,
+    session=TIMESTAMP_DIR,
 ):
     """Fabricate an open-ephys binary-format recording directory.
 
     Returns the top-level path, which is what the script takes on the command
     line. The timestamp is parsed out of that directory's name, so it must keep
     the YYYY-MM-DD_HH-MM-SS form.
+
+    `session` names that directory. Entry names are derived from it, so a test
+    that puts two recordings in one archive has to give them distinct sessions,
+    exactly as two real recordings would have distinct timestamps.
     """
     p = PROFILES[gui_version]
     rate = p["sampling_rate"]
     base = (
         root
-        / TIMESTAMP_DIR
+        / session
         / f"Record Node {p['record_node']}"
         / "experiment1"
         / "recording1"
@@ -382,7 +387,7 @@ def build_tree(
     if write_sync_messages:
         (base / "sync_messages.txt").write_text(sync_messages_text(gui_version))
 
-    return root / TIMESTAMP_DIR
+    return root / session
 
 
 @pytest.fixture(params=[OLD, NEW], ids=["gui<0.6", "gui>=0.6"])

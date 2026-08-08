@@ -318,12 +318,6 @@ def script(argv=None):
 
     p.add_argument("--skip-empty", action="store_true", help="skip empty datasets")
     p.add_argument(
-        "-n",
-        help="name entries or files using %(metavar)s",
-        metavar="TEMPLATE",
-        dest="template",
-    )
-    p.add_argument(
         "--channel-list",
         "-C",
         type=argparse.FileType("r"),
@@ -394,7 +388,24 @@ def script(argv=None):
                 log.info("Reading from '%s':", dir)
                 rec = recording(dir)
 
-                rec_name = str(dir).replace("/", "_")
+                # Named from the session directory down, not from the whole
+                # path: the name used to be str(dir) with the separators
+                # replaced, so the same recording imported from a different
+                # machine, mount point, or working directory produced a
+                # different entry name for identical data, and two such
+                # archives could not be merged without duplicates. Every
+                # component here comes from inside the recording tree, so the
+                # name is a property of the recording.
+                rec_name = "_".join((path.name, *dir.relative_to(path).parts))
+                if rec_name in fp:
+                    # a consequence of the name being reproducible: importing
+                    # the same recording twice is now something the file can
+                    # detect, rather than quietly producing a second copy under
+                    # a name that differed only by where the tree was mounted
+                    log.error(
+                        "- '%s' is already in %s, skipping", rec_name, args.arffile
+                    )
+                    continue
                 entry = arf.create_entry(
                     fp,
                     name=rec_name,

@@ -322,11 +322,48 @@ def test_multiple_recordings_in_one_tree(tmp_path, tmp_path_factory, gui_version
 
 
 def test_appends_to_existing_file(tmp_path, tmp_path_factory, gui_version):
+    # two sessions, so two distinct entry names -- which is what two real
+    # recordings would have, since the session directory carries the timestamp
     root = tmp_path_factory.mktemp("append")
     tree = build_tree(root, gui_version)
     tgt = tmp_path / "out.arf"
     run_oephys(tgt, tree)
-    other = build_tree(tmp_path_factory.mktemp("append2"), gui_version)
+    other = build_tree(
+        tmp_path_factory.mktemp("append2"),
+        gui_version,
+        session="P397_2026-06-17_15-30-00_arc6-main",
+    )
     run_oephys(tgt, other)
     with arf.open_file(tgt, "r") as fp:
         assert len([n for n in fp if arf.is_entry(fp[n])]) == 2
+
+
+def test_entry_name_does_not_depend_on_where_the_tree_lives(
+    tmp_path, tmp_path_factory, gui_version
+):
+    # The name used to be str(dir) with the separators replaced, so the same
+    # recording imported from a different machine, mount point or working
+    # directory produced a different entry name for identical data -- and two
+    # such archives could not be merged without duplicates.
+    names = []
+    for label in ("here", "somewhere/else/entirely"):
+        root = tmp_path_factory.mktemp("loc") / label
+        root.mkdir(parents=True)
+        tgt = tmp_path / f"{root.name}.arf"
+        run_oephys(tgt, build_tree(root, gui_version))
+        with arf.open_file(tgt, "r") as fp:
+            names.append([n for n in fp if arf.is_entry(fp[n])])
+    assert names[0] == names[1]
+    assert names[0][0].startswith("P397_2026-06-17_11-08-34_arc6-main_Record Node ")
+
+
+def test_reimporting_the_same_recording_is_refused(tmp_path, gui_version, caplog):
+    # the other side of a reproducible name: a repeat import collides instead
+    # of silently adding a second copy of the same data
+    tree = build_tree(tmp_path / "src", gui_version)
+    tgt = tmp_path / "out.arf"
+    run_oephys(tgt, tree)
+    run_oephys(tgt, tree)
+    assert "is already in" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
