@@ -142,18 +142,47 @@ def test_split_into_even_chunks(tmp_path):
         assert [fp[n]["chan_a"].shape[0] for n in names] == [2000, 2000, 1000]
 
 
-def test_exactly_divisible_duration_leaves_an_empty_trailing_entry(tmp_path):
-    # CHARACTERIZATION: n_chunks is `int(max_duration // duration) + 1`, so a
-    # recording whose length is an exact multiple of the chunk duration gets one
-    # extra entry containing zero samples. The +1 is there to catch the partial
-    # final chunk and does not check whether one exists.
+def test_exactly_divisible_duration_leaves_no_empty_entry(tmp_path):
+    # The chunk count used to be `int(max_duration // duration) + 1`, which
+    # added a zero-sample entry whenever the length divided evenly. It is now
+    # counted per dataset in samples, so the +1 only appears when there really
+    # is a partial chunk to hold.
     src = make_sampled_file(tmp_path / "a.arf", nentries=1)
     tgt = run_split(tmp_path / "out.arf", src, duration=ENTRY_DURATION)
     with arf.open_file(tgt, "r") as fp:
         names = sorted(n for n in fp if arf.is_entry(fp[n]))
-        assert len(names) == 2
+        assert len(names) == 1
         assert fp[names[0]]["chan_a"].shape[0] == 5000
-        assert fp[names[1]]["chan_a"].shape[0] == 0
+
+
+def test_partial_final_chunk_is_kept(tmp_path):
+    # the complement: a length that does not divide evenly still gets its
+    # remainder written, rather than being truncated
+    src = make_sampled_file(tmp_path / "a.arf", nentries=1)
+    tgt = run_split(tmp_path / "out.arf", src, duration=2.0)
+    with arf.open_file(tgt, "r") as fp:
+        names = sorted(n for n in fp if arf.is_entry(fp[n]))
+        assert [fp[n]["chan_a"].shape[0] for n in names] == [2000, 2000, 1000]
+
+
+def test_entry_without_sampled_data_is_preserved(tmp_path):
+    # an entry holding only event data has no duration, but its attributes and
+    # datasets should survive rather than being dropped for want of a chunk
+    path = tmp_path / "events.arf"
+    with arf.open_file(path, "w") as fp:
+        entry = arf.create_entry(fp, "entry", tstamp, experimenter="dmeliza")
+        arf.create_dataset(entry, "spikes", np.arange(10.0), units="s")
+    tgt = run_split(tmp_path / "out.arf", path, duration=2.0)
+    with arf.open_file(tgt, "r") as fp:
+        names = [n for n in fp if arf.is_entry(fp[n])]
+        assert len(names) == 1
+        assert fp[names[0]].attrs["experimenter"] == "dmeliza"
+
+
+def test_duration_shorter_than_one_sample_is_rejected(tmp_path):
+    src = make_sampled_file(tmp_path / "a.arf", nentries=1)
+    with pytest.raises(ValueError, match="less than one sample"):
+        run_split(tmp_path / "out.arf", src, duration=1e-9)
 
 
 def test_chunk_timestamps_advance_by_duration(tmp_path):
@@ -260,8 +289,8 @@ def test_append_continues_entry_numbering(tmp_path):
     splitter.main(["--append", "--duration", str(ENTRY_DURATION), str(b), str(tgt)])
     with arf.open_file(tgt, "r") as fp:
         names = sorted(n for n in fp if arf.is_entry(fp[n]))
-        # two chunks per source (the second is the empty trailing one)
-        assert names == [f"entry_{i:05}" for i in range(4)]
+        # one chunk per source, numbered on from where the first run stopped
+        assert names == [f"entry_{i:05}" for i in range(2)]
 
 
 # --------------------------------------------------------------------- dry run

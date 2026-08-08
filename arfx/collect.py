@@ -86,6 +86,14 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
             continue
         props = channel_properties(entry, channels, predicate)
         sample_counts = set(v.pop("samples") for v in props.values())
+        # chunksize is chosen by h5py from each dataset's own shape, so entries
+        # of different lengths get different chunk sizes while being perfectly
+        # consistent. Comparing it rejected any file whose entries were not all
+        # the same length -- including every split recording, whose final chunk
+        # is almost always partial. iter_entry_chunks recomputes it per entry
+        # when it needs a read size, so nothing downstream wants it here.
+        for v in props.values():
+            v.pop("chunksize", None)
         if len(sample_counts) > 1:
             log.error("sample count differs across channels in entry %s", entry_name)
             return
@@ -123,9 +131,11 @@ def collect_sampled_script(argv=None):
 
     p = argparse.ArgumentParser(
         prog="arfx-collect-sampled",
-        description="Collect sampled data from arf files across channels and entries"
-        "into a flat binary array. The output file can be any format that supports multiple channels; "
-        "for example, wav or dat (raw binary)",
+        description="Collect sampled data from arf files across channels and entries "
+        "into a flat binary array. The output file can be any format that supports "
+        "multiple channels; for example, wav or dat (raw binary). When there are multiple "
+        "entries, the datasets get spliced without any gap, so when unpacking data for "
+        "spike-sorting it's recommended to process each entry separately. ",
     )
     p.add_argument("--version", action="version", version="%(prog)s " + __version__)
     p.add_argument(

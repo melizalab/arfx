@@ -46,6 +46,29 @@ def entry_duration(entry: h5.Group) -> float:
     return max_dur
 
 
+def entry_chunk_count(entry: h5.Group, duration: float) -> int:
+    """Number of chunks of `duration` seconds needed to cover the entry.
+
+    Counted per dataset in samples rather than from the entry duration in
+    seconds, so that floating-point error cannot tack on a spurious chunk. An
+    entry with no sampled data still yields one chunk, so that its attributes
+    and any event datasets survive the split.
+    """
+    n_chunks = 1
+    for dset in entry.values():
+        if not arf.is_time_series(dset):
+            continue
+        sampling_rate = dset.attrs["sampling_rate"]
+        chunk_size = int(duration * sampling_rate)
+        if chunk_size < 1:
+            raise ValueError(
+                f"a duration of {duration} s is less than one sample at "
+                f"{sampling_rate} Hz"
+            )
+        n_chunks = max(n_chunks, -(-dset.shape[0] // chunk_size))
+    return n_chunks
+
+
 def merge_jill_logs(files: Sequence[h5.Group]) -> np.ndarray:
     """Merge all the 'jill_log' datasets in files into a single structured record array"""
 
@@ -145,7 +168,7 @@ def main(argv=None):
     for entry, timestamp in entries:
         log.info("source entry: %s%s", Path(entry.file.filename).name, entry.name)
         max_duration = entry_duration(entry)
-        n_chunks = int(max_duration // args.duration) + 1
+        n_chunks = entry_chunk_count(entry, args.duration)
         log.debug("  max duration: %3.2f s (chunks=%d)", max_duration, n_chunks)
         for i in range(n_chunks):
             tgt_entry_name = f"entry_{tgt_entry_index:05}"
