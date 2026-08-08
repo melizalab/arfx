@@ -170,12 +170,57 @@ def test_entry_attributes_are_carried_over(tmp_path, src_file):
     tgt = run_select(
         tmp_path, src_file, [{"entry": "entry_01", "begin": 1.0, "end": 2.0}]
     )
+    with arf.open_file(src_file, "r") as fp:
+        src_timestamp = fp["entry_01"].attrs["timestamp"].tolist()
     with arf.open_file(tgt, "r") as fp:
         entry = fp["entry_00000"]
         assert entry.attrs["pen"] == 1
-        # create_entry re-derives the uuid but the source timestamp is preserved
-        assert "timestamp" in entry.attrs
-        assert "uuid" in entry.attrs
+        assert entry.attrs["source_entry"] == "entry_01"
+        # the entry timestamp is not shifted by the interval; the dataset's
+        # offset attribute is what places the selection within the entry
+        assert entry.attrs["timestamp"].tolist() == src_timestamp
+
+
+def test_each_selection_gets_its_own_uuid(tmp_path, src_file):
+    # The uuid identifies the entry, and a selected interval is a new entry.
+    # Passing the source attributes straight to create_entry carried the uuid
+    # with them, so every interval taken from one entry claimed its identity --
+    # including, as here, two intervals in the same output file.
+    tgt = run_select(
+        tmp_path,
+        src_file,
+        [
+            {"entry": "entry_00", "begin": 0.0, "end": 1.0},
+            {"entry": "entry_00", "begin": 5.0, "end": 6.0},
+        ],
+    )
+    with arf.open_file(src_file, "r") as fp:
+        src_uuid = fp["entry_00"].attrs["uuid"]
+    with arf.open_file(tgt, "r") as fp:
+        uuids = [fp[name].attrs["uuid"] for name in ("entry_00000", "entry_00001")]
+    assert len(set(uuids)) == 2
+    assert src_uuid not in uuids
+
+
+def test_entry_without_timestamp_is_skipped(tmp_path, src_file, caplog):
+    # create_entry takes the timestamp positionally, so passing it through
+    # **attrs raised a missing-argument TypeError for an entry that had none --
+    # which killed the whole run, not just that interval.
+    with arf.open_file(src_file, "r+") as fp:
+        del fp["entry_00"].attrs["timestamp"]
+    tgt = run_select(
+        tmp_path,
+        src_file,
+        [
+            {"entry": "entry_00", "begin": 0.0, "end": 1.0},
+            {"entry": "entry_01", "begin": 0.0, "end": 1.0},
+        ],
+    )
+    assert "no timestamp" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        # the good interval still lands, and takes the first output name
+        assert list(arf.keys_by_creation(fp)) == ["entry_00000", "toplevel"]
+        assert fp["entry_00000"].attrs["source_entry"] == "entry_01"
 
 
 def test_selection_beyond_end_of_data_is_empty(tmp_path, src_file):

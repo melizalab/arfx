@@ -92,7 +92,24 @@ def main(argv=None):
                 interval["end"],
                 tgt_entry_name,
             )
-            tgt_entry = arf.create_entry(tgt_file, tgt_entry_name, **src_entry_attrs)
+            if "timestamp" not in src_entry_attrs:
+                # create_entry takes the timestamp positionally; passing it
+                # through **attrs worked only because every conforming entry
+                # has one, and raised a missing-argument TypeError otherwise
+                log.error("    ! no timestamp on %s, skipping", entry_name)
+                continue
+            # the entry timestamp is not adjusted for the interval: the
+            # dataset's offset attribute is what places it within the entry,
+            # and that is set below
+            timestamp = src_entry_attrs.pop("timestamp")
+            # a selected interval is a new entry, not a copy of the source one.
+            # Passing the uuid through gave every interval taken from the same
+            # entry the same identity. Record where it came from instead.
+            src_entry_attrs.pop("uuid", None)
+            src_entry_attrs["source_entry"] = entry_name
+            tgt_entry = arf.create_entry(
+                tgt_file, tgt_entry_name, timestamp, **src_entry_attrs
+            )
             for name, src_dset in src_entry.items():
                 if args.channels is not None and name not in args.channels:
                     continue
