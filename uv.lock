@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "arf"
-version = "2.7.4"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
@@ -18,9 +18,9 @@ dependencies = [
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
     { name = "packaging" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/cc/d112f7221f0a5828cc82f5e5100183ceb36214041a2b005bd3833c87afc5/arf-2.7.4.tar.gz", hash = "sha256:a3a6d69e4ce1a3de1acb90e32198c577cf144776d2b4203a5877c46143016e2b", size = 11375, upload-time = "2026-08-07T13:28:51.516Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/32/f2/2467318a68b474d9f1bd7af857dcee67b5df4c04c014878d1ed9fd9cccf3/arf-3.0.0.tar.gz", hash = "sha256:36a021e70d998a1421a0cfc14f07519801bcaa6ad4a9846852c04a613607aaea", size = 14093, upload-time = "2026-08-08T16:42:13.429Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/a2/5aa4097c215cd920c313fa44b7e29d47b93ba219f4654b7431da68b003cb/arf-2.7.4-py3-none-any.whl", hash = "sha256:f64cc0477d869fd14069544ebf2f85aa507a44bb8e9faf0ef1440e4fcc45dc27", size = 14244, upload-time = "2026-08-07T13:28:50.282Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/ad/f8b5ec9e581fe1ba21f131dbf338e0d201243ef1cad5c32eb79f12aa62e7/arf-3.0.0-py3-none-any.whl", hash = "sha256:e836c179125741816e88a105b4086f4143ebb28e0122447133151dfdfeaa5d2a", size = 17079, upload-time = "2026-08-08T16:42:12.247Z" },
 ]
 
 [[package]]
@@ -46,7 +46,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "arf", specifier = ">=2.7.4" },
+    { name = "arf", specifier = ">=3.0.0,<4" },
     { name = "ewave", specifier = ">=1.0.7" },
     { name = "h5py", specifier = ">=3.15" },
     { name = "natsort" },

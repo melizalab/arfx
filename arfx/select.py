@@ -104,31 +104,29 @@ def main(argv=None):
                         tgt_file.copy(src_dset, tgt_entry, name=name)
                         continue
                     else:
-                        # The spec requires one unit per compound field. The
-                        # result is always handed back as a list, because h5py
-                        # returns the attribute as an ndarray while
-                        # create_dataset tests it with isinstance(list, tuple).
-                        # Need to make sure we handle conforming datasets and
-                        # some non-conforming ones from older versions of jrecord.
+                        # The spec requires one unit per compound field, and
+                        # create_dataset enforces it. Older versions of jrecord
+                        # write a single scalar for the whole record, which
+                        # describes the 'start' field, so those have to be
+                        # expanded before the dataset can be rewritten.
                         src_units = src_dset_attrs.get("units", "")
                         req = len(src_dset.dtype.names)
                         if isinstance(src_units, str | bytes):
-                            # older versions of jrecord write one scalar for
-                            # the whole record, which describes the 'start'
-                            # field
                             src_units = [src_units]
-                        else:
-                            src_units = list(src_units)
                         if len(src_units) != req:
                             # pad (or truncate) to one unit per field. The
                             # filler has to match the string type already
                             # present: h5py refuses a mixed str/bytes sequence.
+                            src_units = list(src_units)
                             filler = (
                                 ""
                                 if src_units and isinstance(src_units[0], str)
                                 else b""
                             )
                             src_units = (src_units + [filler] * req)[:req]
+                        # otherwise pass the attribute through untouched, which
+                        # keeps its HDF5 type: rebuilding it as a list would
+                        # rewrite a fixed-width string array as variable-length
                         src_dset_attrs["units"] = src_units
                 selected, offset = arf.select_interval(
                     src_dset, interval["begin"], interval["end"]

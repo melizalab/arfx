@@ -62,58 +62,56 @@ patch release. Each is reachable from real input unless noted.
   `select.py` converts locally; accepting any sequence would match the tolerant
   reader principle applied elsewhere in arf.
 
-## The arf 3.0 migration
+## The arf 3.0 bump, as it actually went
 
-The boundary suite in `test/test_arf_api.py` exists for this. It asserts the
-contract of every `arf.*` symbol arfx uses, so the bump produces a diff rather
-than a guess. Tests in it marked `CHARACTERIZATION` pin behavior known to be
-changing, and are meant to fail.
+The boundary suite in `test/test_arf_api.py` existed for this, and it did its
+job: running it first and alone produced the API diff instead of a guess.
 
-### Procedure
+**Five failures, all of them predicted.** Four were `CHARACTERIZATION` tests
+written to fire on this bump, and one was the recorded `spec_version` constant.
+The full suite produced the same five failures and no others, so no arfx
+behavior changed — this was a dependency-floor release, not a behavior release.
 
-1. `uv add "arf>=3.0.0"`, then run `test/test_arf_api.py` **first and alone**.
+| What changed | Why arfx was unaffected |
+|---|---|
+| `is_entry` excludes the file root | `select.py` only asks about children, at lines 69 and 153 |
+| `create_entry` rejects `/` in a name | reachable only from a `-n` template; now a CLI error rather than a silently nested group |
+| supported spec range is `[2.0, 3.0)`, derived | every call site funnels through `core.check_file_version`, which logs |
+| `arf_library_version` fallback refused at ≥3.0 | arfx never writes a file without `arf_version` |
+| `spec_version` is 2.2 | only ever compared, never parsed for meaning |
+
+Three things surfaced from reading the diff rather than from a test:
+
+- `core.arfx()`'s `except DeprecationWarning` handler had become unreachable in
+  2.8.1, when every call site moved behind the logging wrapper. Removed.
+- arf's `DeprecationWarning` text tells the user that "the arfx package ships a
+  script that upgrades old files". It does not, since 2.8.1. `core.check_file_version`
+  now appends a correction; **the message itself should be fixed upstream in arf.**
+- `select.py`'s units workaround was half redundant. arf 3.0 tests the argument
+  structurally, so a conforming attribute is now passed through untouched, which
+  preserves its HDF5 type. Only the padding path still rebuilds it as a list.
+
+The bump also brought API arfx does not use yet, now pinned in the boundary
+suite so the *next* bump is also a diff: `file_version`, `check_file_structure`,
+`supported_spec_versions`, and `min_spec_version`.
+
+### Procedure, for the next one
+
+1. `uv add "arf>=N"`, then run `test/test_arf_api.py` **first and alone**.
    Whatever fails there is the API diff; read it as the changelog.
 2. Run the full suite. Failures elsewhere that are not explained by a failure in
    step 1 are arfx integration bugs, not arf changes.
 3. Convert each `CHARACTERIZATION` test that went red to assert the corrected
    behavior. Do not delete them.
-4. Apply the deferred items above, which is the point of the major version.
+4. Pin whatever new API the release added, while its behavior is fresh.
 
-### Known changes to expect
+### Versioning
 
-From the arf side, three that arfx touches directly:
+`README.rst` used to say arfx was "synchronized with the major/minor version
+numbers of the arf package specification". That rule stopped meaning anything
+when arf decoupled its library version from the spec version: arf 3.0.0 ships
+against spec 2.2. Following the spec would have meant arfx never left 2.x.
 
-- **`is_entry` will return `False` for the file root.** An `h5py.File` is a
-  `Group`, so the root currently passes. `select.py` only ever asks about
-  children, so it is unaffected, but any new code that walks from the root is.
-  Pinned by `test_is_entry_on_file_root`.
-
-- **`create_entry` will reject a name containing `/`.** arfx builds entry names
-  from input filenames (`core.iter_entries` uses `Path.stem`) and from `-n`
-  templates whose fields come from HDF5 attributes, so a slash is reachable from
-  user data. `oephys.py` already guards against it. Pinned by
-  `test_create_entry_accepts_name_with_slash`.
-
-- **The supported spec range becomes derived rather than hard-coded**, moving
-  from `[1.1, 3.0)` to `[2.0, 3.0)`, and the `arf_library_version` fallback is
-  refused for library versions at or above 3.0. Files at 1.x that are accepted
-  today will start raising. arfx has no migration path for them at all now that
-  the Python 2 `migrate` module is gone. Pinned by
-  `test_check_file_version_floor_is_one_one` and
-  `test_check_file_version_falls_back_to_library_version`.
-
-`test_supported_spec_versions_not_yet_present` fires when arf gains
-`supported_spec_versions()`; at that point the two boundary tests should derive
-their expectations from it instead of hard-coding the range.
-
-### The version-numbering question
-
-`README.rst` says arfx "uses semantic versioning and is synchronized with the
-major/minor version numbers of the arf package specification". That rule no
-longer says what it used to: arf has deliberately decoupled its library version
-from the spec version, so arf 3.0.0 ships against spec 2.1. Following the arf
-*library* to 3.0 would be following the wrong number, and following the *spec*
-would mean arfx never leaves 2.x.
-
-The rule needs rewording before the next major release, and the choice of
-number for it is a decision in its own right.
+arfx 3.0.0 therefore tracks the arf **library** major version it requires, and
+the dependency is capped at `<4` so the next one cannot arrive silently — a
+major bump is exactly when the boundary suite needs running.

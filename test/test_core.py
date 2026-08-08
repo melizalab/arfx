@@ -79,6 +79,23 @@ def test_script_add_entries(src_wav_files, tmp_path):
             assert np.all(d[:] == dset["data"])
 
 
+def test_add_entries_rejects_template_with_slash(src_wav_files, tmp_path, capsys):
+    # A slash in an entry name used to create a nested group instead of an entry,
+    # silently; arf 3.0 rejects it. The name here comes from -n, but the same
+    # applies to names built from input file names and HDF5 attributes, so this
+    # has to surface as a CLI error rather than a traceback.
+    argv = [
+        "-cf",
+        str(tmp_path / "output.arf"),
+        "-n",
+        "a/b",
+        *(str(path) for path in src_wav_files),
+    ]
+    with pytest.raises(SystemExit):
+        core.arfx(argv)
+    assert "path separator" in capsys.readouterr().err
+
+
 def test_extract_entries(src_arf_file, tmp_path):
     core.extract_entries(src_arf_file, directory=tmp_path)
     # only the sampled data can be extracted
@@ -288,6 +305,15 @@ def test_version_check_warns_rather_than_aborting(tmp_path, attrs, caplog):
     core.extract_entries(src, directory=tmp_path)
     core.copy_entries(tmp_path / "copy.arf", [src])
     assert "warning" in caplog.text
+
+
+def test_version_check_corrects_arfs_offer_to_upgrade(tmp_path, caplog):
+    # arf's DeprecationWarning text points the user at an upgrade script in this
+    # package. There isn't one -- the python 2 migrate module was removed in
+    # 2.8.1 -- so the wrapper says what arfx will actually do instead.
+    src = _unversioned_file(tmp_path / "ancient.arf", arf_version="1.0")
+    core.list_entries(src)
+    assert "cannot convert files older than" in caplog.text
 
 
 def test_extract_entry_without_timestamp(tmp_path):

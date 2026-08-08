@@ -49,6 +49,16 @@ def check_file_version(arfp: h5.File) -> None:
     """
     try:
         arf.check_file_version(arfp)
+    except DeprecationWarning as e:
+        # arf's message for this case offers to upgrade the file with a script
+        # from this package, which was true until the python 2 migrate module
+        # was removed in 2.8.1. Say what is actually on offer instead.
+        log.warning("warning: %s", e)
+        log.warning(
+            "         arfx cannot convert files older than ARF spec %s; "
+            "reading it anyway, but expect missing attributes",
+            arf.supported_spec_versions()[0],
+        )
     except Warning as e:
         log.warning("warning: %s", e)
 
@@ -753,13 +763,10 @@ def arfx(argv=None):
         opts = args.__dict__.copy()
         entries = opts.pop("entries") or None
         args.op(args.arffile, entries, **opts)
-    except DeprecationWarning as e:
-        # nothing in this package can convert such a file any more; the old
-        # migrate module was python 2 code and has been removed
-        print(f"[arfx] error: {e}")
-        print(f"      this file is older than the {arf.spec_version} spec")
-        p.exit(-1)
     except (ValueError, FileNotFoundError) as err:
+        # ValueError also covers arf's rejection of an entry name containing a
+        # path separator, which -n templates can produce from file names and
+        # HDF5 attributes
         p.error(f"[arfx] error: {err}")
 
 

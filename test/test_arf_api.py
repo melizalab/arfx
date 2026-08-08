@@ -12,13 +12,14 @@ module first and in isolation: whatever fails here is the actual API diff.
 Failures elsewhere in the suite that are not explained by a failure here are
 arfx integration bugs.
 
-Values pinned against arf 2.7.3, spec 2.1. Note that the library version and
-the spec version are on independent scales and are diverging: arf 3.0.0 is a
-library major bump while the spec stays at 2.1. Do not infer one from the other.
+Values pinned against arf 3.0.0, spec 2.2. The library version and the spec
+version are on independent scales: 3.0.0 was a library major bump that shipped
+against spec 2.2. Do not infer one from the other. Where a bound is derivable,
+take it from supported_spec_versions() rather than writing the number twice.
 
 Tests marked CHARACTERIZATION pin behavior that is known to be wrong and is
-scheduled to change in arf 3.0.0. They exist to fire on the bump. When one goes
-red, convert it to assert the corrected behavior -- do not delete it.
+scheduled to change. They exist to fire on a bump. When one goes red, convert it
+to assert the corrected behavior -- do not delete it.
 """
 
 import arf
@@ -32,12 +33,12 @@ from packaging.version import Version
 
 def test_spec_version():
     # Written into the arf_version attribute of every file arfx creates, and
-    # compared against the >= 3.0 ceiling in check_file_version.
-    assert arf.spec_version == "2.1"
+    # compared against the ceiling in check_file_version.
+    assert arf.spec_version == "2.2"
 
 
 def test_library_version_is_parseable():
-    assert Version(arf.__version__) >= Version("2.7.2")
+    assert Version(arf.__version__) >= Version("3.0.0")
 
 
 def test_version_info_is_string():
@@ -162,18 +163,17 @@ def test_create_entry_accepts_extra_attributes(tmp_path):
         assert entry.attrs["pen"] == 1
 
 
-def test_create_entry_accepts_name_with_slash(tmp_path):
-    # CHARACTERIZATION: rejected in 3.0.0. A name containing a slash silently
-    # creates a nested group rather than an entry at the root.
-    #
-    # arfx builds entry names from input filenames (core.iter_entries uses
-    # Path.stem) and from -n templates whose fields come from HDF5 attributes,
-    # so a slash is reachable from user data. oephys.py already guards against
-    # it explicitly. When this test fails, audit those two paths.
+def test_create_entry_rejects_name_with_slash(tmp_path):
+    # A slash used to create a nested group rather than an entry at the root,
+    # silently. arfx builds entry names from input filenames (core.iter_entries
+    # uses Path.stem) and from -n templates whose fields come from HDF5
+    # attributes, so a slash is reachable from user data; oephys.py guards
+    # against it explicitly. The arfx-level consequence is covered by
+    # test_core.py::test_add_entries_rejects_template_with_slash.
     with arf.open_file(tmp_path / "t.arf", "w") as fp:
-        entry = arf.create_entry(fp, "a/b", 1000)
-        assert entry.name == "/a/b"
-        assert "a" in fp
+        with pytest.raises(ValueError):
+            arf.create_entry(fp, "a/b", 1000)
+        assert "a" not in fp
 
 
 # -------------------------------------------------------------- create_dataset
@@ -224,6 +224,69 @@ def test_create_dataset_sets_units_and_datatype(arf_file):
     dset = arf_file["entry"]["sampled_1d"]
     assert dset.attrs["units"] == ""
     assert dset.attrs["datatype"] == arf.DataTypes.UNDEFINED
+
+
+def _as_text(units):
+    return [u.decode("ascii") if isinstance(u, bytes) else str(u) for u in units]
+
+
+@pytest.mark.parametrize(
+    "units",
+    [
+        (b"samples", b""),
+        [b"samples", b""],
+        ["samples", ""],
+        np.array([b"samples", b""]),
+        np.array(["samples", ""]),
+    ],
+)
+def test_create_dataset_accepts_any_units_sequence(tmp_path, units):
+    # 3.0.0 tests the units argument structurally instead of requiring a list or
+    # tuple. This is what select.py's read-modify-write needs: h5py hands the
+    # attribute back as an ndarray, so the isinstance check meant a compound
+    # dataset could not be copied from one file to another without converting
+    # first. The unicode-dtype case is the one numpy produces from a list of
+    # str, and h5py refuses it directly with "No conversion path for dtype".
+    data = np.rec.fromrecords([(50, b"a")], names=("start", "name"))
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        entry = arf.create_entry(fp, "e", 1000)
+        dset = arf.create_dataset(entry, "marked", data, units=units, sampling_rate=100)
+        assert _as_text(dset.attrs["units"]) == ["samples", ""]
+
+
+def test_units_storage_class_follows_the_input_form(tmp_path):
+    # The value survives every input form, but the HDF5 type does not, and that
+    # is visible to a reader. h5py stores a list or tuple as variable-length
+    # strings, which come back as str; a fixed-width bytes array stays fixed
+    # width and comes back as np.bytes_. So passing a units attribute read from
+    # one file straight into another preserves its class, while rebuilding it as
+    # a list -- which select.py does when it has to pad -- converts it. Anything
+    # comparing this attribute has to decode first; arf._decode_attribute and
+    # arfx's own predicates already do.
+    data = np.rec.fromrecords([(50, b"a")], names=("start", "name"))
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        entry = arf.create_entry(fp, "e", 1000)
+        from_list = arf.create_dataset(
+            entry, "a", data, units=[b"samples", b""], sampling_rate=100
+        )
+        from_array = arf.create_dataset(
+            entry, "b", data, units=np.array([b"samples", b""]), sampling_rate=100
+        )
+        assert from_list.attrs["units"].dtype == np.dtype("O")
+        assert from_array.attrs["units"].dtype.kind == "S"
+
+
+def test_create_dataset_rejects_units_sequence_on_time_series(tmp_path):
+    # Only a compound dataset takes one unit per field. Rejecting this early
+    # also keeps a sequence away from the `units == ""` comparison below it,
+    # which on an ndarray is elementwise and raises the ambiguous-truth-value
+    # ValueError from inside numpy rather than saying what is wrong.
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        entry = arf.create_entry(fp, "e", 1000)
+        with pytest.raises(ValueError, match="only complex event data"):
+            arf.create_dataset(
+                entry, "d", np.zeros(10, dtype="h"), units=["mV", "mV"], sampling_rate=1
+            )
 
 
 def test_create_dataset_honors_compression_and_maxshape(tmp_path):
@@ -324,11 +387,12 @@ def test_is_entry_discriminates_groups_from_datasets(arf_file):
 
 
 def test_is_entry_on_file_root(arf_file):
-    # CHARACTERIZATION: wrong, changes in 3.0.0. is_entry is isinstance(obj,
-    # h5py.Group) and an h5py.File is a Group, so the root passes even though the
-    # spec says the root is not an entry. select.py is unaffected because it only
-    # ever asks about children, but any future walk that starts at the root is not.
-    assert arf.is_entry(arf_file) is True
+    # The root used to pass, because an h5py.File is a Group. The spec says it
+    # is not an entry: a file may hold top-level datasets belonging to no entry.
+    # arfx was unaffected by the change because select.py only ever asks about
+    # children (select.py:69 filters keys_by_creation, select.py:153 walks
+    # src.values()). Any future walk that starts at the root is not.
+    assert arf.is_entry(arf_file) is False
 
 
 def test_is_time_series_tolerates_bytes_units(tmp_path):
@@ -406,6 +470,41 @@ def test_select_interval_seconds_units_are_not_rescaled(arf_file):
     assert data.tolist() == [0.5]
 
 
+def test_select_interval_tolerates_scalar_units_on_a_compound_dataset(tmp_path):
+    # The spec wants one unit per field, but older versions of jrecord write a
+    # single scalar describing the whole record, and examples/ has such a file.
+    # 3.0.0 treats a scalar as applying to every field rather than indexing into
+    # the string, which would have tested its first character against "samples"
+    # and so read a sample-timebase spike train as if it were in seconds.
+    # select.py has to build the file with plain h5py: create_dataset enforces
+    # the per-field rule, which is exactly why the non-conforming files exist.
+    data = np.rec.fromrecords([(50, b"a"), (150, b"b")], names=("start", "name"))
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        entry = arf.create_entry(fp, "e", 1000)
+        dset = entry.create_dataset("marked", data=data)
+        dset.attrs["units"] = b"samples"
+        dset.attrs["sampling_rate"] = 100
+        selected, offset = arf.select_interval(dset, 1.0, 3.0)
+        # rescaled to samples, so the window is [100, 300)
+        assert offset == 100
+        assert selected["start"].tolist() == [50]
+
+
+def test_select_interval_rebases_an_integer_start_field(tmp_path):
+    # The subtraction is cast to the field's own type. begin is only an integer
+    # when the window was rescaled to samples, and an in-place subtraction of a
+    # float from an integer field raises rather than converting.
+    data = np.rec.fromrecords([(250, b"a")], names=("start", "name"))
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        entry = arf.create_entry(fp, "e", 1000)
+        dset = arf.create_dataset(
+            entry, "m", data, units=(b"samples", b""), sampling_rate=100
+        )
+        selected, _offset = arf.select_interval(dset, 1.0, 3.0)
+        assert selected["start"].dtype == data["start"].dtype
+        assert selected["start"].tolist() == [150]
+
+
 def test_select_interval_empty_dataset_preserves_dtype(arf_file):
     # Before 2.7.3 the `if idx.size > 0` guard tested the boolean mask rather
     # than the number of matches, so an empty dataset returned the mask itself --
@@ -448,14 +547,23 @@ def test_check_file_version_accepts_bytes_attribute(tmp_path):
 
 
 def test_check_file_version_falls_back_to_library_version(tmp_path):
-    # CHARACTERIZATION: narrows in 3.0.0. The fallback is a legacy accommodation
-    # for very old files that predate arf_version. It was only ever safe while the
-    # library and spec versions shared a scale, and they no longer do, so 3.0
-    # refuses the substitution for library versions >= 3.0. A file stamped
-    # arf_library_version=3.0.0 and no arf_version will start raising.
+    # A legacy accommodation for files written before arf_version existed. Only
+    # ever safe while the library and spec versions shared a scale.
     path = _versioned_file(tmp_path / "lib.arf", arf_library_version="2.1")
     with h5.File(path, "r") as fp:
         assert arf.check_file_version(fp) == Version("2.1")
+
+
+def test_check_file_version_refuses_modern_library_version_as_fallback(tmp_path):
+    # The other half of the fallback, narrowed in 3.0.0: the scales diverged, so
+    # a library version at or above the spec ceiling no longer stands in for a
+    # spec version. This is the case a file written by arf 3.x with no
+    # arf_version would hit -- which the library does not do, but the C++
+    # implementation and older third-party writers are not bound by that.
+    path = _versioned_file(tmp_path / "lib3.arf", arf_library_version="3.0.0")
+    with h5.File(path, "r") as fp:
+        with pytest.raises(UserWarning):
+            arf.check_file_version(fp)
 
 
 @pytest.mark.parametrize(
@@ -469,42 +577,108 @@ def test_check_file_version_falls_back_to_library_version(tmp_path):
 )
 def test_check_file_version_raises(tmp_path, attrs, exc):
     # NB these are raised as exceptions, not emitted via the warnings module.
-    # Half of arfx's call sites catch `Warning` and half do not, so which
-    # version boundary applies determines whether arfx logs or aborts.
+    # Every arfx call site funnels through core.check_file_version, which catches
+    # `Warning` and logs, so the shared base class is what makes the check
+    # advisory rather than fatal.
     #
     # The unparseable case previously escaped as packaging's InvalidVersion,
-    # which is not a Warning subclass and so passed straight through every
-    # arfx `except Warning` handler. Fixed in 2.7.3.
+    # which is not a Warning subclass and so passed straight through that
+    # handler. Fixed in 2.7.3.
     path = _versioned_file(tmp_path / "bad.arf", **attrs)
     with h5.File(path, "r") as fp:
         with pytest.raises(exc):
             arf.check_file_version(fp)
 
 
-def test_check_file_version_ceiling_is_three(tmp_path):
-    # Brackets the ceiling from below: 2.9 is accepted, 3.0 raises (above).
-    path = _versioned_file(tmp_path / "edge.arf", arf_version="2.9")
+def test_supported_spec_versions_brackets_the_implemented_spec():
+    # The range check_file_version enforces, reported rather than inferred. The
+    # ceiling is derived: the next major after the implemented spec, on the
+    # reasoning that a minor revision cannot change a required attribute.
+    low, high = arf.supported_spec_versions()
+    assert low == arf.min_spec_version
+    assert Version(low) <= Version(arf.spec_version) < Version(high)
+    assert Version(high).major == Version(arf.spec_version).major + 1
+    assert Version(high).minor == 0
+
+
+def test_check_file_version_accepts_just_under_the_ceiling(tmp_path):
+    # Brackets the ceiling from below. Built from the reported range so it keeps
+    # testing the boundary rather than the number 2.9 after the spec moves.
+    high = Version(arf.supported_spec_versions()[1])
+    under = f"{high.major - 1}.999"
+    path = _versioned_file(tmp_path / "edge.arf", arf_version=under)
     with h5.File(path, "r") as fp:
-        assert arf.check_file_version(fp) == Version("2.9")
+        assert arf.check_file_version(fp) == Version(under)
 
 
-def test_check_file_version_floor_is_one_one(tmp_path):
-    # CHARACTERIZATION: the floor rises in 3.0.0. Today the supported range is
-    # hard-coded as [1.1, 3.0). In 3.0 it becomes derived -- [min_spec_version,
-    # next major after spec_version), i.e. [2.0, 3.0) -- so a 1.x file that is
-    # accepted here will start raising DeprecationWarning. arfx has no migration
-    # path for such files at all now that the python 2 migrate module is gone.
-    path = _versioned_file(tmp_path / "old.arf", arf_version="1.5")
+def test_check_file_version_floor_is_the_reported_minimum(tmp_path):
+    # The floor rose from 1.1 to 2.0 in arf 3.0.0: the required attributes
+    # changed at spec 2.0, so the library will not vouch for anything older.
+    # arfx has no migration path for such files -- the python 2 migrate module
+    # was removed in 2.8.1 -- so all it can do is report them.
+    low = Version(arf.supported_spec_versions()[0])
+    path = _versioned_file(tmp_path / "old.arf", arf_version=f"{low.major - 1}.5")
     with h5.File(path, "r") as fp:
-        assert arf.check_file_version(fp) == Version("1.5")
+        with pytest.raises(DeprecationWarning):
+            arf.check_file_version(fp)
 
 
-def test_supported_spec_versions_not_yet_present():
-    # CHARACTERIZATION: 3.0.0 adds supported_spec_versions() and min_spec_version
-    # so the accepted range is reported rather than inferred. When this fails,
-    # switch the two boundary tests above to derive their expectations from it
-    # instead of hard-coding 1.1 and 3.0.
-    assert not hasattr(arf, "supported_spec_versions")
+# ----------------------------------------------------------------- file_version
+
+
+def test_file_version_reports_without_judging(tmp_path):
+    # New in 3.0.0, and the counterpart to the test above: a caller whose job is
+    # handling old files has to read the version *because* it is out of range.
+    # arfx has no such caller now that migrate is gone, but this is the hook a
+    # future one would use.
+    low = Version(arf.supported_spec_versions()[0])
+    old = f"{low.major - 1}.5"
+    path = _versioned_file(tmp_path / "old.arf", arf_version=old)
+    with h5.File(path, "r") as fp:
+        assert arf.file_version(fp) == Version(old)
+
+
+def test_file_version_still_raises_on_unreadable_version(tmp_path):
+    # The one thing it cannot do is report a version that is not there.
+    path = _versioned_file(tmp_path / "none.arf")
+    with h5.File(path, "r") as fp:
+        with pytest.raises(UserWarning):
+            arf.file_version(fp)
+
+
+# ------------------------------------------------------- check_file_structure
+
+
+def test_check_file_structure_passes_a_conforming_file(arf_file):
+    assert arf.check_file_structure(arf_file) == []
+
+
+def test_check_file_structure_flags_a_shared_dataset(tmp_path):
+    # A dataset hard-linked into two entries has no defined time, since an
+    # entry's timestamp is what places its datasets. Nothing prevents this at
+    # write time -- it takes plain h5py to do, not the arf API -- which is why
+    # the check exists separately.
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        one = arf.create_entry(fp, "one", 1000)
+        two = arf.create_entry(fp, "two", 2000)
+        arf.create_dataset(one, "d", np.zeros(10, dtype="h"), sampling_rate=100)
+        two["d"] = one["d"]
+        problems = arf.check_file_structure(fp)
+    # NB one defect, two problems: the walk reports the dataset from each entry
+    # it is reachable through, so the length of the list is not a defect count.
+    assert problems == [
+        "dataset 'one/d' is linked into more than one entry",
+        "dataset 'two/d' is linked into more than one entry",
+    ]
+
+
+def test_check_file_structure_ignores_top_level_datasets(tmp_path):
+    # The spec allows datasets outside any entry -- select.py copies them
+    # through verbatim -- so they must not be reported.
+    with arf.open_file(tmp_path / "t.arf", "w") as fp:
+        fp.create_dataset("log", data=np.zeros(4, dtype="h"))
+        arf.create_entry(fp, "one", 1000)
+        assert arf.check_file_structure(fp) == []
 
 
 # ------------------------------------------------------------------ timestamps

@@ -239,6 +239,25 @@ def test_conforming_marked_units_round_trip(tmp_path, marked_file):
         assert events["name"].tolist() == [b"b"]
 
 
+def test_conforming_marked_units_keep_their_hdf5_type(tmp_path):
+    # A conforming units attribute is passed to create_dataset untouched, so a
+    # fixed-width string array stays fixed width. Rebuilding it as a list --
+    # which arf used to require, and which the padding path still does -- would
+    # rewrite it as variable-length. Files from the C++ library store it fixed
+    # width, and select is meant to be a lossless copy of the intervals it takes.
+    path = tmp_path / "fixed.arf"
+    with arf.open_file(path, "w") as fp:
+        entry = arf.create_entry(fp, "entry", 1000)
+        dset = add_marked(entry, (b"samples", b""))
+        del dset.attrs["units"]
+        dset.attrs["units"] = np.array([b"samples", b""])
+    tgt = run_select(tmp_path, path, [{"entry": "entry", "begin": 5.0, "end": 6.0}])
+    with arf.open_file(tgt, "r") as fp:
+        units = fp["entry_00000"]["events"].attrs["units"]
+        assert units.dtype.kind == "S"
+        assert units.tolist() == [b"samples", b""]
+
+
 def test_malformed_units_on_marked_dataset_is_repaired(tmp_path, jrecord_file):
     # jrecord writes a single scalar where the spec wants one unit per compound
     # field. select.py pads it out to the field count so the data can be
