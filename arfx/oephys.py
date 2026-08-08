@@ -335,7 +335,9 @@ def script(argv=None):
         metavar="KEY=VALUE",
         dest="attrs",
         action=core.ParseKeyVal,
-        help="specify attributes of entries",
+        help=(
+            "specify attributes of entries; the value is read as JSON when it parses (so pen=1 is a number), otherwise as a string"
+        ),
     )
     p.add_argument(
         "-T",

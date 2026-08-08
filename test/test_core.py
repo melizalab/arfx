@@ -324,3 +324,71 @@ def test_extract_entry_without_timestamp(tmp_path):
         del fp["entry"].attrs["timestamp"]
     core.extract_entries(src, directory=tmp_path)
     assert (tmp_path / "entry_pcm.wav").exists()
+
+
+# ----------------------------------------------------------------- ParseKeyVal
+
+
+def parse_attrs(*args):
+    import argparse
+
+    p = argparse.ArgumentParser(prog="test")
+    p.add_argument("-k", action=core.ParseKeyVal, dest="attrs")
+    return p.parse_args([a for arg in args for a in ("-k", arg)]).attrs
+
+
+@pytest.mark.parametrize(
+    "arg,expected",
+    [
+        # the point of the change: numeric metadata survives the command line
+        ("pen=1", 1),
+        ("gain=1.5", 1.5),
+        ("scaled=true", True),
+        ("sites=[1, 2, 3]", [1, 2, 3]),
+        # not JSON, so a bare string -- which is most metadata
+        ("bird=C194", "C194"),
+        ("date=2026-08-08", "2026-08-08"),
+        # JSON rejects a leading zero, which is what keeps a padded identifier
+        # from turning into a number
+        ("box=007", "007"),
+        # and quoting is the escape hatch for one that would otherwise parse
+        ('animal="397"', "397"),
+        ("empty=", ""),
+        # a value may contain '='; only the first separates key from value
+        ("cmd=a=b", "a=b"),
+    ],
+)
+def test_parse_keyval_types(arg, expected):
+    (value,) = parse_attrs(arg).values()
+    assert value == expected
+    assert isinstance(value, type(expected))
+
+
+def test_parse_keyval_accumulates():
+    assert parse_attrs("a=1", "b=two") == {"a": 1, "b": "two"}
+
+
+@pytest.mark.parametrize("arg", ["noequals", "=novalue"])
+def test_parse_keyval_rejects_malformed(arg, capsys):
+    with pytest.raises(SystemExit):
+        parse_attrs(arg)
+    assert "badly formed" in capsys.readouterr().err
+
+
+def test_parse_keyval_rejects_a_mapping(capsys):
+    # json.loads is happy to produce a dict, but h5py cannot store one
+    with pytest.raises(SystemExit):
+        parse_attrs('meta={"a": 1}')
+    assert "cannot hold a mapping" in capsys.readouterr().err
+
+
+def test_parse_keyval_round_trips_through_a_file(src_wav_files, tmp_path):
+    tgt = tmp_path / "typed.arf"
+    core.arfx(
+        ["-cf", str(tgt), "-k", "pen=1", "-k", "bird=C194", *map(str, src_wav_files)]
+    )
+    with arf.open_file(tgt, "r") as fp:
+        attrs = fp[next(iter(arf.keys_by_creation(fp)))].attrs
+        assert attrs["pen"] == 1
+        assert not isinstance(attrs["pen"], (str, bytes))
+        assert attrs["bird"] == "C194"

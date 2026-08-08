@@ -570,15 +570,37 @@ def repack_file(src: Path | str, *, compress: int | None = None, **options) -> N
 
 
 class ParseKeyVal(argparse.Action):
+    """Collect KEY=VALUE arguments, reading each value as JSON where it parses.
+
+    HDF5 attributes are typed, and this used to store every value as a string,
+    so `-k pen=1` could not be read back as a number and there was no way to say
+    otherwise from the command line. JSON is the rule because it supplies
+    numbers, booleans and lists without a syntax of its own, and because its
+    quoting doubles as the escape hatch: `-k animal='"397"'` keeps a
+    numeric-looking identifier a string.
+
+    A value that is not valid JSON is taken as a bare string, which is what most
+    metadata is -- including anything with a hyphen or a leading zero, so dates
+    and padded identifiers are safe.
+    """
+
     def __call__(self, parser, namespace, arg, option_string=None):
-        kv = getattr(namespace, self.dest)
-        if kv is None:
-            kv = dict()
-        if not arg.count("=") == 1:
-            raise ValueError(f"-k {arg} argument badly formed; needs key=value")
-        else:
-            key, val = arg.split("=")
-            kv[key] = val
+        import json
+
+        kv = getattr(namespace, self.dest) or dict()
+        key, sep, val = arg.partition("=")
+        # partition rather than split: a value may itself contain '='
+        if not sep or not key:
+            parser.error(f"{option_string} {arg} is badly formed; needs key=value")
+        try:
+            value = json.loads(val)
+        except ValueError:
+            value = val
+        if isinstance(value, dict):
+            parser.error(
+                f"{option_string} {key}: an HDF5 attribute cannot hold a mapping"
+            )
+        kv[key] = value
         setattr(namespace, self.dest, kv)
 
 
@@ -732,7 +754,9 @@ def arfx(argv=None):
     )
     g.add_argument(
         "-k",
-        help="specify attributes of entries",
+        help=(
+            "specify attributes of entries; the value is read as JSON when it parses (so pen=1 is a number), otherwise as a string"
+        ),
         action=ParseKeyVal,
         metavar="KEY=VALUE",
         dest="attrs",

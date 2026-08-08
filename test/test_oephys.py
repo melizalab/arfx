@@ -265,9 +265,9 @@ def test_extra_attributes_and_datatype(tmp_path, tree):
     with arf.open_file(tgt, "r") as fp:
         entry = only_entry(fp)
         assert entry.attrs["bird"] == "C194"
-        # core.ParseKeyVal does no type coercion, so numeric metadata is stored
-        # as a string. -k pen=1 is not readable back as an integer.
-        assert entry.attrs["pen"] == "1"
+        # C194 is not valid JSON so it stays a string, while pen=1 is a number.
+        # core.ParseKeyVal used to store both as strings.
+        assert entry.attrs["pen"] == 1
         assert entry["CH1"].attrs["datatype"] == arf.DataTypes.EXTRAC_HP
 
 

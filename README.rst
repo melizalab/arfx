@@ -55,7 +55,10 @@ any metadata to be stored in the entry. Some important options include:
 -  **-f FILE:** use ARF file FILE
 -  **-v:** verbose output
 -  **-n NAME:** name entries sequentially, using NAME as the base
--  **-k key=value** add metadata to the entries
+-  **-k key=value** add metadata to the entries. The value is read as JSON if it
+   parses as JSON, and taken as a plain string if it does not, so ``-k pen=1``
+   stores a number while ``-k bird=C194`` stores a string. Quote a value to keep
+   it a string when it would otherwise be a number: ``-k animal='"397"'``.
 -  **-T DATATYPE:** specify the type of data
 
 input files
