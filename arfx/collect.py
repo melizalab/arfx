@@ -175,12 +175,12 @@ def collect_sampled_script(argv=None):
     p.add_argument(
         "--start",
         type=int,
-        help="if set, only collect data after this time point (in samples)",
+        help="if set, skip this many samples of output before writing",
     )
     p.add_argument(
         "--stop",
         type=int,
-        help="if set, only collect data before this time point (in samples)",
+        help="if set, stop after this sample of output (exclusive)",
     )
     p.add_argument(
         "--mountain-params",
@@ -217,6 +217,23 @@ def collect_sampled_script(argv=None):
             log.error("unable to collect data from inconsistent file")
             return 1
         entry_names, channel_props = consistency
+        # An empty selection used to fall through: first() returns None for an
+        # empty dict and all_items_equal() returns True, so the sampling rate
+        # and dtype reached the output writer as None and produced a file with
+        # no channels rather than an error.
+        if not entry_names:
+            log.error("no entries to collect; check -e/--entries")
+            return 1
+        if not channel_props:
+            if args.channels is None:
+                log.error("no sampled datasets in any entry of '%s'", args.arffile)
+            else:
+                log.error(
+                    "none of the requested channels (%s) are sampled datasets in '%s'",
+                    ", ".join(args.channels),
+                    args.arffile,
+                )
+            return 1
         if not all_items_equal(channel_props, operator.itemgetter("sampling_rate")):
             log.warning(" - warning: not all datasets have the same sampling rate")
         if not all_items_equal(channel_props, operator.itemgetter("units")):
@@ -246,7 +263,9 @@ def collect_sampled_script(argv=None):
         if args.dry_run:
             log.info(" - dry run, ending script")
             return
-        sample_count = 0
+        start = args.start or 0
+        sample_count = 0  # samples read so far, across all entries
+        written = 0
         with io.open(
             args.outfile,
             mode="w",
@@ -259,12 +278,26 @@ def collect_sampled_script(argv=None):
                 for chunk in iter_entry_chunks(
                     entry, args.channels, arf.is_time_series
                 ):
-                    if args.start is None or sample_count > args.start:
-                        ofp.write(chunk.astype(dtype))
+                    lo = sample_count
                     sample_count += chunk.shape[0]
-                    if args.stop is not None and sample_count > args.stop:
+                    # --start and --stop count samples from the beginning of the
+                    # output, and a chunk boundary means nothing to the caller,
+                    # so both bounds cut inside a chunk. Rounding out to the
+                    # boundary instead dropped everything before the first one
+                    # past --start, and overshot --stop by up to a whole chunk.
+                    begin = max(lo, start) - lo
+                    stop = (
+                        sample_count
+                        if args.stop is None
+                        else min(sample_count, args.stop)
+                    )
+                    end = stop - lo
+                    if end > begin:
+                        ofp.write(chunk[begin:end].astype(dtype))
+                        written += end - begin
+                    if args.stop is not None and sample_count >= args.stop:
                         log.info(
                             " - stopping as requested after writing %d samples",
-                            sample_count - (args.start or 0),
+                            written,
                         )
                         return

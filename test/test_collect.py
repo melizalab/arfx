@@ -210,13 +210,57 @@ def test_collect_dry_run_writes_nothing(tmp_path, sampled_arf_file):
     assert not out.exists()
 
 
-def test_collect_stop_truncates_output(tmp_path, sampled_arf_file):
-    # --stop is applied per chunk, so the cutoff is the first chunk boundary at
-    # or past the requested sample count rather than the exact sample
-    out = run_collect(sampled_arf_file, tmp_path / "out.dat", "--stop", "1000")
-    with io.open(out, "r") as fp:
-        written = fp.read().shape[0]
-    assert 0 < written < NENTRIES * ENTRY_SAMPLES
+def collected(path, *extra, tmp_path):
+    """Run collect and return the first channel, which is a ramp within each entry."""
+    out = run_collect(path, tmp_path / "out.dat", *extra)
+    with io.open(out, "r", dtype="h", nchannels=len(CHANNELS)) as fp:
+        return fp.read()[:, 0]
+
+
+def test_collect_stop_truncates_at_the_requested_sample(tmp_path, sampled_arf_file):
+    # --stop used to be applied per chunk, so the output ran to the first chunk
+    # boundary at or past the request and overshot by up to a whole chunk.
+    chan_a = collected(sampled_arf_file, "--stop", "1000", tmp_path=tmp_path)
+    assert chan_a.shape == (1000,)
+    assert chan_a.tolist() == list(range(1000))
+
+
+def test_collect_start_keeps_the_sample_it_names(tmp_path, sampled_arf_file):
+    # The old test was `sample_count > args.start` against the count *before*
+    # the chunk, so the chunk containing the requested start was dropped whole.
+    chan_a = collected(sampled_arf_file, "--start", "100", tmp_path=tmp_path)
+    assert chan_a.shape == (NENTRIES * ENTRY_SAMPLES - 100,)
+    assert chan_a[0] == 100
+
+
+def test_collect_window_cuts_inside_a_chunk(tmp_path, sampled_arf_file):
+    chan_a = collected(
+        sampled_arf_file, "--start", "100", "--stop", "200", tmp_path=tmp_path
+    )
+    assert chan_a.tolist() == list(range(100, 200))
+
+
+def test_collect_window_spans_an_entry_boundary(tmp_path, sampled_arf_file):
+    # --start and --stop count samples in the output, which splices entries
+    # without a gap, so a window may open in one entry and close in the next.
+    # Each entry's chan_a is the same ramp, so the seam is visible in the data.
+    chan_a = collected(
+        sampled_arf_file,
+        "--start",
+        str(ENTRY_SAMPLES - 100),
+        "--stop",
+        str(ENTRY_SAMPLES + 100),
+        tmp_path=tmp_path,
+    )
+    assert chan_a.shape == (200,)
+    assert chan_a.tolist() == list(range(ENTRY_SAMPLES - 100, ENTRY_SAMPLES)) + list(
+        range(100)
+    )
+
+
+def test_collect_stop_beyond_the_data_is_harmless(tmp_path, sampled_arf_file):
+    chan_a = collected(sampled_arf_file, "--stop", "999999", tmp_path=tmp_path)
+    assert chan_a.shape == (NENTRIES * ENTRY_SAMPLES,)
 
 
 def test_collect_mountain_params(tmp_path, sampled_arf_file):
@@ -239,6 +283,50 @@ def test_collect_warns_on_mixed_sampling_rates(tmp_path, caplog):
         )
     run_collect(path, tmp_path / "out.dat")
     assert "same sampling rate" in caplog.text
+
+
+def test_collect_unmatched_channels_exits_nonzero(tmp_path, sampled_arf_file, caplog):
+    # An empty selection used to sail through: first() returns None for an empty
+    # dict and all_items_equal() returns True, so the sampling rate and dtype
+    # reached the output writer as None and it produced a channel-less file.
+    out = tmp_path / "out.dat"
+    assert (
+        collect.collect_sampled_script(
+            ["--channels=nonesuch", str(sampled_arf_file), str(out)]
+        )
+        == 1
+    )
+    assert "nonesuch" in caplog.text
+    assert not out.exists()
+
+
+def test_collect_file_with_no_sampled_data_exits_nonzero(tmp_path, caplog):
+    path = tmp_path / "events.arf"
+    with arf.open_file(path, "w") as fp:
+        entry = arf.create_entry(fp, "entry", 1000)
+        arf.create_dataset(
+            entry,
+            "spikes",
+            np.arange(0, 100, 10),
+            units="samples",
+            sampling_rate=SAMPLING_RATE,
+        )
+    out = tmp_path / "out.dat"
+    assert collect.collect_sampled_script([str(path), str(out)]) == 1
+    assert "no sampled datasets" in caplog.text
+    assert not out.exists()
+
+
+def test_collect_no_matching_entries_exits_nonzero(tmp_path, sampled_arf_file, caplog):
+    out = tmp_path / "out.dat"
+    assert (
+        collect.collect_sampled_script(
+            ["--entries=no_such_entry", str(sampled_arf_file), str(out)]
+        )
+        == 1
+    )
+    assert "no entries to collect" in caplog.text
+    assert not out.exists()
 
 
 def test_collect_on_inconsistent_file_exits_nonzero(tmp_path, caplog):
