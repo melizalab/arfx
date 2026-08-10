@@ -41,6 +41,20 @@ release.
   recording could not be merged without duplicates. The name is now the session
   directory plus the components below it. **This renames entries in new
   archives**; existing files are untouched.
+- A session directory holding more than one `experimentN/recordingM` is now
+  handled (#44). Newer versions of the GUI write several recordings into one
+  folder; each becomes its own entry, as it would if it had its own folder.
+  They are visited in natural order, so `recording10` follows `recording9`
+  rather than `recording1`.
+- **Entry timestamps for GUI 0.6 and later now come from the wall-clock time in
+  each recording's own `sync_messages.txt`**, not from the session directory
+  name. The directory name gives the start of the *first* recording only, so
+  every entry in a multi-recording session used to be stamped with the same
+  instant — in the example recording, three that were made 8 and 94 seconds
+  apart. Entries also gain millisecond precision. Recordings from before 0.6
+  carry no wall-clock time (their `Software time:` line is a monotonic clock,
+  not an epoch) and still take the directory name's timestamp, which is exact
+  for them: those versions write one recording per directory.
 - A recording that is already in the target file is logged and skipped instead
   of raising `ValueError` from h5py. This case only became detectable once the
   names were reproducible.

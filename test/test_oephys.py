@@ -11,19 +11,24 @@ Its metadata is copied from real GUI 0.5.3.1 and 1.0.2 recordings rather than
 invented; see the note there.
 """
 
+import datetime
 import json
 
 import arf
 import numpy as np
 import pytest
 from conftest import (
+    EXPECTED_SOFTWARE_TIME,
     EXPECTED_TIME,
     NCHANNELS,
     NEW,
     NSAMPLES,
     OLD,
     SAMPLE_OFFSET,
+    SOFTWARE_TIME_MS,
+    TIMESTAMP_DIR,
     build_tree,
+    is_old,
     message_dset,
     only_entry,
     rate,
@@ -38,11 +43,15 @@ from arfx import oephys
 # ------------------------------------------------------------------- happy path
 
 
-def test_creates_one_entry_per_recording(tmp_path, tree):
+def test_creates_one_entry_per_recording(tmp_path, tree, gui_version):
+    # The timestamp comes from sync_messages.txt where the GUI writes a
+    # wall-clock time there, and from the session directory name otherwise --
+    # the pre-0.6 "Software time:" line is a monotonic clock, not an epoch.
+    expected = EXPECTED_TIME if is_old(gui_version) else EXPECTED_SOFTWARE_TIME
     tgt = run_oephys(tmp_path / "out.arf", tree)
     with arf.open_file(tgt, "r") as fp:
         entry = only_entry(fp)
-        assert arf.timestamp_to_datetime(entry.attrs["timestamp"]) == EXPECTED_TIME
+        assert arf.timestamp_to_datetime(entry.attrs["timestamp"]) == expected
 
 
 def test_continuous_channels_are_deinterleaved(tmp_path, tree):
@@ -367,3 +376,99 @@ def test_reimporting_the_same_recording_is_refused(tmp_path, gui_version, caplog
     assert "is already in" in caplog.text
     with arf.open_file(tgt, "r") as fp:
         assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
+
+
+# ------------------------------------------- several recordings in one session
+
+
+def test_every_recording_in_a_session_becomes_an_entry(tmp_path, tmp_path_factory):
+    # Newer versions of the GUI write several experiments, and several
+    # recordings per experiment, into one session directory. Each one is its
+    # own entry, exactly as it would be if it had its own folder.
+    root = tmp_path_factory.mktemp("multi")
+    for experiment, recording in ((1, 1), (1, 2), (2, 1)):
+        build_tree(root, NEW, experiment=experiment, recording=recording)
+    tree = root / TIMESTAMP_DIR
+    tgt = run_oephys(tmp_path / "out.arf", tree)
+    with arf.open_file(tgt, "r") as fp:
+        names = [n for n in arf.keys_by_creation(fp) if arf.is_entry(fp[n])]
+    assert len(names) == 3
+    assert [n.rsplit("_", 2)[-2:] for n in names] == [
+        ["experiment1", "recording1"],
+        ["experiment1", "recording2"],
+        ["experiment2", "recording1"],
+    ]
+
+
+def test_recordings_in_a_session_get_their_own_timestamps(tmp_path, tmp_path_factory):
+    # The whole point of #44: the session directory name gives the start of the
+    # first recording only, so taking every entry's timestamp from it put three
+    # recordings made minutes apart at the same instant.
+    root = tmp_path_factory.mktemp("multitime")
+    offsets = (0, 8128, 94298)  # ms, from examples/double_2026-08-10_10-07-17_double
+    for (experiment, recording), offset in zip(
+        ((1, 1), (1, 2), (2, 1)), offsets, strict=True
+    ):
+        build_tree(
+            root,
+            NEW,
+            experiment=experiment,
+            recording=recording,
+            software_time_ms=SOFTWARE_TIME_MS + offset,
+        )
+    tgt = run_oephys(tmp_path / "out.arf", root / TIMESTAMP_DIR)
+    with arf.open_file(tgt, "r") as fp:
+        times = [
+            arf.timestamp_to_datetime(fp[n].attrs["timestamp"])
+            for n in arf.keys_by_creation(fp)
+            if arf.is_entry(fp[n])
+        ]
+    assert times == [
+        EXPECTED_SOFTWARE_TIME + datetime.timedelta(milliseconds=offset)
+        for offset in offsets
+    ]
+    assert len(set(times)) == 3
+
+
+def test_recordings_are_ordered_naturally(tmp_path, tmp_path_factory):
+    # glob order is filesystem-dependent, and plain lexicographic sorting puts
+    # recording10 before recording2
+    root = tmp_path_factory.mktemp("natsort")
+    for recording in (1, 2, 10):
+        build_tree(root, NEW, recording=recording)
+    tgt = run_oephys(tmp_path / "out.arf", root / TIMESTAMP_DIR)
+    with arf.open_file(tgt, "r") as fp:
+        names = [n for n in arf.keys_by_creation(fp) if arf.is_entry(fp[n])]
+    assert [n.rsplit("_", 1)[-1] for n in names] == [
+        "recording1",
+        "recording2",
+        "recording10",
+    ]
+
+
+def test_pre_0_6_recording_falls_back_to_the_directory_timestamp(
+    tmp_path, tmp_path_factory, caplog
+):
+    # The pre-0.6 "Software time: 153530@1000000Hz" line is a monotonic clock,
+    # not an epoch, so there is nothing to take a wall-clock time from and the
+    # entry keeps the session's. Using that line would date it to 1970.
+    #
+    # These sessions hold a single recording, so the fallback is exact rather
+    # than merely the best available -- the directory name is that recording's
+    # start time. Multiple recordings per folder only arrive with 0.6.
+    tree = build_tree(tmp_path_factory.mktemp("oldsession"), OLD)
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["-v"])
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert arf.timestamp_to_datetime(entry.attrs["timestamp"]) == EXPECTED_TIME
+    assert "no wall-clock time" in caplog.text
+
+
+def test_find_software_time_ignores_the_legacy_wording(tmp_path_factory):
+    tree = build_tree(tmp_path_factory.mktemp("legacy"), OLD)
+    assert oephys.find_software_time(recording_dir(tree, OLD)) is None
+
+
+def test_find_software_time_without_sync_messages(tmp_path_factory):
+    tree = build_tree(tmp_path_factory.mktemp("nosync"), NEW, write_sync_messages=False)
+    assert oephys.find_software_time(recording_dir(tree, NEW)) is None

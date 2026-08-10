@@ -156,6 +156,11 @@ def sampled_arf_file(tmp_path):
 
 TIMESTAMP_DIR = "P397_2026-06-17_11-08-34_arc6-main"
 EXPECTED_TIME = datetime.datetime(2026, 6, 17, 11, 8, 34)
+# The wall-clock time GUI >= 0.6 writes into sync_messages.txt, which is where
+# the entry timestamp now comes from. It agrees with the directory name to the
+# second and carries milliseconds beyond it; both come from a real recording.
+SOFTWARE_TIME_MS = 1781708914429
+EXPECTED_SOFTWARE_TIME = datetime.datetime.fromtimestamp(SOFTWARE_TIME_MS / 1000)
 NSAMPLES = 1000
 NCHANNELS = 2
 SAMPLE_OFFSET = 152832
@@ -223,7 +228,7 @@ def channel_metadata(gui_version, count):
     ]
 
 
-def sync_messages_text(gui_version):
+def sync_messages_text(gui_version, software_time_ms=SOFTWARE_TIME_MS):
     """sync_messages.txt, verbatim in the wording this generation writes.
 
     The two generations share no literal text at all beyond the processor
@@ -240,7 +245,7 @@ def sync_messages_text(gui_version):
         )
     return (
         "Software Time (milliseconds since midnight Jan 1st 1970 UTC): "
-        "1781708914429\n"
+        f"{software_time_ms}\n"
         f"Start Time for {p['processor_name']} ({p['processor_id']}) - "
         f"{p['stream_name']} @ {rate} Hz: {SAMPLE_OFFSET}\n"
     )
@@ -266,6 +271,9 @@ def build_tree(
     spikes=False,
     channel_metadata_count=None,
     session=TIMESTAMP_DIR,
+    experiment=1,
+    recording=1,
+    software_time_ms=SOFTWARE_TIME_MS,
 ):
     """Fabricate an open-ephys binary-format recording directory.
 
@@ -276,6 +284,12 @@ def build_tree(
     `session` names that directory. Entry names are derived from it, so a test
     that puts two recordings in one archive has to give them distinct sessions,
     exactly as two real recordings would have distinct timestamps.
+
+    `experiment` and `recording` place this recording within the session. Newer
+    versions of the GUI write several of each into one session directory, so
+    calling this repeatedly with the same `root` and `session` builds the tree
+    that arfx-oephys has to turn into several entries. Give each one its own
+    `software_time_ms`; that is where its timestamp comes from.
     """
     p = PROFILES[gui_version]
     rate = p["sampling_rate"]
@@ -283,10 +297,10 @@ def build_tree(
         root
         / session
         / f"Record Node {p['record_node']}"
-        / "experiment1"
-        / "recording1"
+        / f"experiment{experiment}"
+        / f"recording{recording}"
     )
-    base.mkdir(parents=True)
+    base.mkdir(parents=True, exist_ok=True)
     event_folder = p["message_folder"] if events == "string" else p["ttl_folder"]
 
     def write_indices(directory, sample_numbers):
@@ -385,7 +399,9 @@ def build_tree(
     (base / "structure.oebin").write_text(json.dumps(structure))
 
     if write_sync_messages:
-        (base / "sync_messages.txt").write_text(sync_messages_text(gui_version))
+        (base / "sync_messages.txt").write_text(
+            sync_messages_text(gui_version, software_time_ms)
+        )
 
     return root / session
 

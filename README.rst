@@ -171,6 +171,14 @@ Converts the output of an `open-ephys <https://open-ephys.org/>`_ recording (ope
 
 We typically run this command before starting spike sorting to create a copy of the recording for archival.
 
+From GUI 0.6 on, a session directory may hold more than one
+``experimentN/recordingM``. Each becomes its own entry, named for the session
+and its place within it, and each is timestamped from the wall-clock time in
+its own ``sync_messages.txt`` rather than from the session directory name,
+which gives only the start of the first recording. Older recordings have one
+recording per directory and no wall-clock time recorded, so they take the
+timestamp from the directory name.
+
 arfx-collect-sampled
 ~~~~~~~~~~~~~~~~~~~~
 

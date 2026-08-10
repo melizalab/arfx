@@ -6,12 +6,14 @@ https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+for
 
 """
 
+import datetime
 import logging
 import re
 from pathlib import Path
 
 import arf
 import numpy as np
+from natsort import natsorted
 from packaging.version import Version
 
 from arfx import core
@@ -242,6 +244,35 @@ _SYNC_RX = re.compile(
 )
 
 
+# The same file also carries a wall-clock time for the recording, but only in
+# the newer wording. The pre-0.6 line is "Software time: 153530@1000000Hz",
+# which is a monotonic clock reading, not an epoch -- using it as a timestamp
+# would put the recording in 1970. Matching on the wording rather than the
+# version is what keeps them apart: only one of the two forms says what its
+# epoch is.
+_SOFTWARE_TIME_RX = re.compile(
+    r"Software Time \(milliseconds[^)]*\):\s*(?P<ms>\d+)", re.IGNORECASE
+)
+
+
+def find_software_time(path: Path) -> datetime.datetime | None:
+    """The wall-clock start of a recording, from sync_messages.txt.
+
+    Returns None when the file says nothing usable, which is the case for every
+    recording written before GUI 0.6. The caller falls back to the timestamp in
+    the session directory name -- correct for the first recording of a session
+    and increasingly wrong for the rest.
+    """
+    try:
+        text = (path / "sync_messages.txt").read_text()
+    except OSError:
+        return None
+    match = _SOFTWARE_TIME_RX.search(text)
+    if match is None:
+        return None
+    return datetime.datetime.fromtimestamp(int(match.group("ms")) / 1000)
+
+
 def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | None:
     """Look up the start sample for a processor in sync_messages.txt.
 
@@ -287,8 +318,6 @@ def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | N
 
 def script(argv=None):
     import argparse
-    import datetime
-    import re
 
     from tqdm import tqdm
 
@@ -379,14 +408,28 @@ def script(argv=None):
         for path in args.path:
             try:
                 m = ts_regex.search(str(path))
-                timestamp = datetime.datetime(*(int(v) for v in m.groups()))
+                session_time = datetime.datetime(*(int(v) for v in m.groups()))
             except (AttributeError, ValueError) as e:
                 log.error("can't parse timestamp from directory name %s: %s", path, e)
                 p.exit(-1)
-            for structfile in path.glob("**/structure.oebin"):
+            # natsorted, so experiment10 follows experiment9 rather than
+            # experiment1, and the entries land in the order they were recorded
+            for structfile in natsorted(path.glob("**/structure.oebin")):
                 dir = structfile.parent
                 log.info("Reading from '%s':", dir)
                 rec = recording(dir)
+
+                # A session directory can hold several experiments and several
+                # recordings per experiment, and they do not all start when the
+                # session does. Taking the timestamp from the directory name
+                # gave every one of them the start of the first.
+                timestamp = find_software_time(dir)
+                if timestamp is None:
+                    timestamp = session_time
+                    log.debug(
+                        "- no wall-clock time in sync_messages.txt, "
+                        "using the session directory's"
+                    )
 
                 # Named from the session directory down, not from the whole
                 # path: the name used to be str(dir) with the separators
