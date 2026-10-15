@@ -408,10 +408,127 @@ def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | N
     return None
 
 
+def copy_datasets(entry, rec, *, skip_empty, compress, datatype, cont_channels):
+    """Copy the datasets of a recording into an ARF entry"""
+    from tqdm import tqdm
+
+    for name, dset in rec.datasets.items():
+        if skip_empty and dset.size == 0:
+            log.info("  - skipping empty dataset '%s'", name)
+        elif isinstance(dset, continuous_dset):
+            log.info("  - processing continuous dataset '%s'", dset.name)
+            # first generate the datasets
+            datasets = []
+            for idx, info in enumerate(dset.channel_attrs):
+                if (
+                    cont_channels is not None
+                    and info["channel_name"] not in cont_channels
+                ):
+                    log.info(
+                        "     - skipping unrequested channel '%s'",
+                        info["channel_name"],
+                    )
+                    continue
+                log.info(
+                    "     - creating dataset for channel '%s'",
+                    info["channel_name"],
+                )
+                # create an empty dataset and fill it in chunks
+                tgt = entry.create_dataset(
+                    name=info["channel_name"],
+                    shape=(dset.nsamples,),
+                    dtype=dset.dtype,
+                    compression=compress,
+                    chunks=True,
+                )
+                chunksize = tgt.chunks[0]
+                arf.set_attributes(
+                    tgt,
+                    datatype=datatype,
+                    offset=dset.offset,
+                    sampling_rate=dset.sampling_rate,
+                    **info,
+                )
+                datasets.append((idx, tgt))
+            if len(datasets) == 0:
+                continue
+            log.info(
+                "  - reading %d samples in chunks of %d",
+                dset.nsamples,
+                chunksize,
+            )
+            expected = int(dset.nsamples / chunksize)
+            for offset, chunk in tqdm(
+                dset.iter_chunks(chunksize), total=expected, unit="chunk"
+            ):
+                nsamples, _ = chunk.shape
+                for i, tgt in datasets:
+                    tgt[offset : offset + nsamples] = chunk[:, i]
+
+        elif isinstance(dset, event_dset):
+            log.info("  - processing event dataset '%s'", dset.name)
+            arf.create_dataset(
+                entry,
+                name=dset.name,
+                data=dset.data,
+                datatype=arf.DataTypes.EVENT,
+                sampling_rate=dset.sampling_rate,
+                units=dset.units,
+                **dset.attrs,
+            )
+
+
+def sampled_layout(datasets) -> dict[str, float]:
+    """Map channel name to sampling rate for the sampled datasets in a mapping"""
+    return {
+        name: dset.attrs["sampling_rate"]
+        for name, dset in datasets.items()
+        if hasattr(dset, "dtype")
+        and dset.dtype.names is None
+        and "sampling_rate" in dset.attrs
+    }
+
+
+def check_matches_file(fp, rec, cont_channels=None):
+    """Check a recording's sampled channels against those already in a file.
+
+    The comparison is against the first entry that has any. Recordings that are
+    meant to be sorted together need the same channels at the same rate. Raises
+    ValueError if the channel names or the sampling rates differ.
+    """
+    incoming = {}
+    for dset in rec.datasets.values():
+        if isinstance(dset, continuous_dset):
+            for info in dset.channel_attrs:
+                if cont_channels is None or info["channel_name"] in cont_channels:
+                    incoming[info["channel_name"]] = dset.sampling_rate
+    if not incoming:
+        return
+    for ref_name in arf.keys_by_creation(fp):
+        reference = sampled_layout(fp[ref_name])
+        if reference:
+            break
+    else:
+        return
+    if incoming.keys() != reference.keys():
+        missing = sorted(reference.keys() - incoming.keys())
+        extra = sorted(incoming.keys() - reference.keys())
+        raise ValueError(
+            f"channels differ from entry '{ref_name}' "
+            f"({len(missing)} missing, {len(extra)} new; "
+            f"e.g. {(missing or extra)[0]})"
+        )
+    rates = {n for n in incoming if incoming[n] != reference[n]}
+    if rates:
+        name = sorted(rates)[0]
+        raise ValueError(
+            f"sampling rate differs from entry '{ref_name}' on {len(rates)} "
+            f"channel(s) (e.g. {name}: {incoming[name]:g} vs {reference[name]:g})"
+        )
+
+
 def script(argv=None):
     import argparse
-
-    from tqdm import tqdm
 
     p = argparse.ArgumentParser(
         prog="arfx-oephys",
@@ -529,6 +646,7 @@ def script(argv=None):
                 )
             recordings.append((path, dir, timestamp))
 
+    skipped = []
     with arf.open_file(args.arffile, "a", **fp_args) as fp:
         log.info("Opened '%s' for writing", args.arffile)
         for path, dir, timestamp in recordings:
@@ -550,82 +668,43 @@ def script(argv=None):
                 # detect, rather than quietly producing a second copy under
                 # a name that differed only by where the tree was mounted
                 log.error("- '%s' is already in %s, skipping", rec_name, args.arffile)
+                skipped.append(rec_name)
                 continue
-            entry = arf.create_entry(
-                fp,
-                name=rec_name,
-                timestamp=timestamp,
-                entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
-                **rec.attrs,
-            )
-            if args.attrs is not None:
-                arf.set_attributes(entry, **args.attrs)
-            log.info("- creating entry '%s'", rec_name)
+            try:
+                check_matches_file(fp, rec, cont_channels)
+            except ValueError as e:
+                log.error("- can't append '%s': %s", rec_name, e)
+                p.exit(-1)
+            try:
+                entry = arf.create_entry(
+                    fp,
+                    name=rec_name,
+                    timestamp=timestamp,
+                    entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
+                    **rec.attrs,
+                )
+                if args.attrs is not None:
+                    arf.set_attributes(entry, **args.attrs)
+                log.info("- creating entry '%s'", rec_name)
+                copy_datasets(
+                    entry,
+                    rec,
+                    skip_empty=args.skip_empty,
+                    compress=args.compress,
+                    datatype=args.datatype,
+                    cont_channels=cont_channels,
+                )
+            except BaseException:
+                # a partial entry would look complete to the duplicate check
+                # on the next run
+                log.error("- import of '%s' failed; removing the entry", rec_name)
+                if rec_name in fp:
+                    del fp[rec_name]
+                raise
 
-            for name, dset in rec.datasets.items():
-                if args.skip_empty and dset.size == 0:
-                    log.info("  - skipping empty dataset '%s'", name)
-                elif isinstance(dset, continuous_dset):
-                    log.info("  - processing continuous dataset '%s'", dset.name)
-                    # first generate the datasets
-                    datasets = []
-                    for idx, info in enumerate(dset.channel_attrs):
-                        if (
-                            cont_channels is not None
-                            and info["channel_name"] not in cont_channels
-                        ):
-                            log.info(
-                                "     - skipping unrequested channel '%s'",
-                                info["channel_name"],
-                            )
-                            continue
-                        log.info(
-                            "     - creating dataset for channel '%s'",
-                            info["channel_name"],
-                        )
-                        # create an empty dataset and fill it in chunks
-                        tgt = entry.create_dataset(
-                            name=info["channel_name"],
-                            shape=(dset.nsamples,),
-                            dtype=dset.dtype,
-                            compression=args.compress,
-                            chunks=True,
-                        )
-                        chunksize = tgt.chunks[0]
-                        arf.set_attributes(
-                            tgt,
-                            datatype=args.datatype,
-                            offset=dset.offset,
-                            sampling_rate=dset.sampling_rate,
-                            **info,
-                        )
-                        datasets.append((idx, tgt))
-                    if len(datasets) == 0:
-                        continue
-                    log.info(
-                        "  - reading %d samples in chunks of %d",
-                        dset.nsamples,
-                        chunksize,
-                    )
-                    expected = int(dset.nsamples / chunksize)
-                    for offset, chunk in tqdm(
-                        dset.iter_chunks(chunksize), total=expected, unit="chunk"
-                    ):
-                        nsamples, _ = chunk.shape
-                        for i, tgt in datasets:
-                            tgt[offset : offset + nsamples] = chunk[:, i]
-
-                elif isinstance(dset, event_dset):
-                    log.info("  - processing event dataset '%s'", dset.name)
-                    arf.create_dataset(
-                        entry,
-                        name=dset.name,
-                        data=dset.data,
-                        datatype=arf.DataTypes.EVENT,
-                        sampling_rate=dset.sampling_rate,
-                        units=dset.units,
-                        **dset.attrs,
-                    )
+    if skipped:
+        log.error("%d recording(s) skipped as already imported", len(skipped))
+        p.exit(1)
 
 
 if __name__ == "__main__":

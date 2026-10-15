@@ -268,6 +268,7 @@ def build_tree(
     write_sample_numbers=True,
     sample_numbers=None,
     event_samples=(100, 500, 900),
+    sampling_rate=None,
     write_sync_messages=True,
     events="string",
     spikes=False,
@@ -289,6 +290,8 @@ def build_tree(
 
     `sample_numbers` replaces the contiguous index the builder would otherwise
     write, to fabricate an acquisition board whose counter jumped.
+
+    `sampling_rate` overrides the continuous stream's rate.
 
     `event_samples` sets the sample numbers of the three events.
 
@@ -355,7 +358,7 @@ def build_tree(
         "continuous": [
             dict(
                 folder_name=p["continuous_folder"],
-                sample_rate=rate,
+                sample_rate=rate if sampling_rate is None else sampling_rate,
                 num_channels=nchannels,
                 channels=channel_metadata(gui_version, nmeta),
                 **processor,

@@ -528,10 +528,88 @@ def test_reimporting_the_same_recording_is_refused(tmp_path, gui_version, caplog
     tree = build_tree(tmp_path / "src", gui_version)
     tgt = tmp_path / "out.arf"
     run_oephys(tgt, tree)
-    run_oephys(tgt, tree)
+    with pytest.raises(SystemExit) as excinfo:
+        run_oephys(tgt, tree)
+    assert excinfo.value.code == 1
     assert "is already in" in caplog.text
     with arf.open_file(tgt, "r") as fp:
         assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
+
+
+def test_failed_import_leaves_no_partial_entry(
+    tmp_path, tmp_path_factory, gui_version, monkeypatch
+):
+    # otherwise the duplicate check would skip the broken entry on the next run
+    def fail(self, nsamples):
+        raise OSError("disk went away")
+        yield
+
+    tree = build_tree(tmp_path_factory.mktemp("fail"), gui_version)
+    tgt = tmp_path / "out.arf"
+    monkeypatch.setattr(oephys.continuous_dset, "iter_chunks", fail)
+    with pytest.raises(OSError, match="disk went away"):
+        run_oephys(tgt, tree)
+    monkeypatch.undo()
+    with arf.open_file(tgt, "r") as fp:
+        assert [n for n in fp if arf.is_entry(fp[n])] == []
+    run_oephys(tgt, tree)
+    with arf.open_file(tgt, "r") as fp:
+        assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
+
+
+def test_appending_a_recording_with_other_channels_is_refused(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    tgt = tmp_path / "out.arf"
+    run_oephys(
+        tgt,
+        build_tree(tmp_path_factory.mktemp("a"), gui_version, session=TIMESTAMP_DIR),
+    )
+    narrow = build_tree(
+        tmp_path_factory.mktemp("b"),
+        gui_version,
+        nchannels=1,
+        data=np.zeros((NSAMPLES, 1), dtype="int16"),
+        session="C_2026-10-12_12-00-00",
+    )
+    with pytest.raises(SystemExit):
+        run_oephys(tgt, narrow)
+    assert "channels differ from entry" in caplog.text
+    assert "(1 missing, 0 new; e.g. CH2)" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
+
+
+def test_appending_a_recording_with_another_sampling_rate_is_refused(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    tgt = tmp_path / "out.arf"
+    run_oephys(tgt, build_tree(tmp_path_factory.mktemp("a"), gui_version))
+    other = build_tree(
+        tmp_path_factory.mktemp("b"),
+        gui_version,
+        sampling_rate=rate(gui_version) / 2,
+        session="C_2026-10-12_12-00-00",
+    )
+    with pytest.raises(SystemExit):
+        run_oephys(tgt, other)
+    assert "sampling rate differs from entry" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        assert len([n for n in fp if arf.is_entry(fp[n])]) == 1
+
+
+def test_appending_a_matching_recording_does_not_warn(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    tgt = tmp_path / "out.arf"
+    run_oephys(tgt, build_tree(tmp_path_factory.mktemp("a"), gui_version))
+    run_oephys(
+        tgt,
+        build_tree(
+            tmp_path_factory.mktemp("b"), gui_version, session="C_2026-10-12_12-00-00"
+        ),
+    )
+    assert "differs from entry" not in caplog.text
 
 
 # ------------------------------------------- several recordings in one session

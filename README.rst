@@ -182,6 +182,12 @@ path). For a directory with no such name, use ``--session-time DATETIME`` (ISO 8
 to supply it. The script exits before writing anything if a recording has no
 start time from any of these.
 
+You can run the script multiple times on the same ARF file to append additional
+recordings that you intend to sort together. A recording whose entry is already
+there is skipped, and the new recording's sampled channel names and sampling
+rates are checked against the first entry already in the file to make sure that
+the data are compatible. An import that fails partway removes its partial entry.
+
 arfx-collect-sampled
 ~~~~~~~~~~~~~~~~~~~~
 
