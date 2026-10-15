@@ -28,6 +28,23 @@ def first_existing(*paths: Path) -> Path | None:
             return path
 
 
+def find_discontinuities(
+    sample_numbers: np.ndarray, chunk: int = 1 << 24
+) -> list[tuple[int, int, int]]:
+    """Locate the places where a sample index is not a run of consecutive integers.
+
+    Returns (index, before, after) for each i where sample_numbers[i + 1] !=
+    sample_numbers[i] + 1. Scans in chunks, because the index of a long
+    recording is hundreds of megabytes and is memory-mapped.
+    """
+    found = []
+    for start in range(0, max(sample_numbers.size - 1, 0), chunk):
+        seg = np.asarray(sample_numbers[start : start + chunk + 1], dtype="int64")
+        for i in np.nonzero(np.diff(seg) != 1)[0]:
+            found.append((start + int(i), int(seg[i]), int(seg[i + 1])))
+    return found
+
+
 class dataset:
     def __init__(self, base, structure):
         self.attrs = dict(**structure)
@@ -61,6 +78,7 @@ class continuous_dset(dataset):
         else:
             tspath = self.path / "sample_numbers.npy"
         sample_offset = None
+        self.sample_count = None
         if not tspath.exists():
             log.warning(
                 "- warning: %s file is missing for %s; falling back on sync_messages.txt",
@@ -69,8 +87,9 @@ class continuous_dset(dataset):
             )
         else:
             timestamps = np.load(tspath, mmap_mode="r")
+            self.sample_count = timestamps.size
             if timestamps.size > 0:
-                sample_offset = timestamps[0]
+                sample_offset = self._first_sample_of_final_run(timestamps)
             else:
                 log.warning(
                     "- warning: %s is empty for %s; falling back on sync_messages.txt",
@@ -96,6 +115,13 @@ class continuous_dset(dataset):
                 f"size of file '{datfile}' ({size:d}) is not a multiple of the channel count ({self.nchannels})"
             )
         self.nsamples = size // self.nchannels
+        if self.sample_count is not None and self.sample_count != self.nsamples:
+            log.warning(
+                "- warning: %s has %d sample numbers but %d samples of data",
+                self.name,
+                self.sample_count,
+                self.nsamples,
+            )
         log.debug(
             "- %s: array (%d, %d) @ %.1f/s; offset=%.3f s",
             structure["folder_name"],
@@ -104,6 +130,39 @@ class continuous_dset(dataset):
             self.sampling_rate,
             self.offset,
         )
+
+    def _first_sample_of_final_run(self, sample_numbers: np.ndarray) -> int:
+        """The sample number that the first sample would have on the final clock.
+
+        The acquisition board's counter can jump or reset during a recording.
+        One offset cannot describe two clocks, and events are stamped with the
+        clock in force when they happened, which for anything after a startup
+        glitch is the last one. So the offset is extrapolated backward from the
+        end of the index, which is exact when the index ends in a contiguous
+        run and is the first sample when it is contiguous throughout. The result
+        can be negative if the counter was reset after the data began.
+
+        Whether a jump is also a gap in the signal cannot be told from the
+        index; that takes looking at the data.
+        """
+        breaks = find_discontinuities(sample_numbers)
+        for index, before, after in breaks:
+            log.warning(
+                "- warning: sample numbers in %s jump at index %d (%d -> %d, %+d)",
+                self.name,
+                index + 1,
+                before,
+                after,
+                after - before,
+            )
+        if breaks:
+            log.warning(
+                "- warning: %s: offset is set from the final contiguous run; samples"
+                " before index %d are on a different clock",
+                self.name,
+                breaks[-1][0] + 1,
+            )
+        return int(sample_numbers[-1]) - (sample_numbers.size - 1)
 
     @property
     def size(self) -> int:
@@ -144,6 +203,20 @@ class event_dset(dataset):
         else:
             timestamps = np.load(path / "sample_numbers.npy")
         self.sampling_rate = structure["sample_rate"]
+        # Events are stored in the order they arrived, so the sample numbers
+        # only go backward when the clock they were stamped with did. Network
+        # messages can arrive a few milliseconds out of order, which is not a
+        # clock change, so only steps of a second or more are reported.
+        steps = np.diff(timestamps.astype("int64"))
+        for row in np.nonzero(steps <= -self.sampling_rate)[0]:
+            log.warning(
+                "- warning: sample numbers in %s step backward after row %d"
+                " (%d -> %d); rows before this may be on an earlier clock",
+                self.name,
+                row,
+                timestamps[row],
+                timestamps[row + 1],
+            )
         if structure["type"] == "string":
             messages = np.load(path / "text.npy")
             if gui_version < Version("0.6.0"):

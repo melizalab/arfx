@@ -195,6 +195,115 @@ def test_sync_message_without_matching_processor_is_fatal(
         run_oephys(tmp_path / "out.arf", tree)
 
 
+# ------------------------------------------------- discontinuous sample numbers
+
+
+def jumpy_sample_numbers(n=NSAMPLES):
+    """The shape of the counter in a real recording (C182_4_1, issue #47).
+
+    The board's counter ran on, jumped back two seconds, then reset to a small
+    number while the signal was still startup padding, and counted on without a
+    break to the end. Returns the index and the first sample number of the
+    final run, which is where the offset has to come from.
+    """
+    first_break, second_break, final_start = 200, 600, 300
+    runs = (
+        np.arange(89523584, 89523584 + first_break),
+        np.arange(89475872, 89475872 + second_break - first_break),
+        np.arange(final_start, final_start + n - second_break),
+    )
+    return np.concatenate(runs), final_start - second_break
+
+
+def test_offset_comes_from_the_final_contiguous_run(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    # Events are stamped on the clock in force when they happened, so a
+    # reset during startup means the first sample has to be given the
+    # number it would have on the final clock -- here a negative one.
+    sample_numbers, first = jumpy_sample_numbers()
+    tree = build_tree(
+        tmp_path_factory.mktemp("jumpy"), gui_version, sample_numbers=sample_numbers
+    )
+    tgt = run_oephys(tmp_path / "out.arf", tree)
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert entry["CH1"].attrs["offset"] == pytest.approx(first / rate(gui_version))
+        assert entry["CH1"].attrs["offset"] < 0
+        # the data themselves are untouched, whatever the clock did
+        assert entry["CH1"][0] == 0
+        assert entry["CH1"][-1] == NSAMPLES - 1
+
+
+def test_discontinuities_are_reported_with_index_and_size(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    sample_numbers, _ = jumpy_sample_numbers()
+    tree = build_tree(
+        tmp_path_factory.mktemp("jumpywarn"), gui_version, sample_numbers=sample_numbers
+    )
+    run_oephys(tmp_path / "out.arf", tree)
+    assert "jump at index 200 (89523783 -> 89475872, -47911)" in caplog.text
+    assert "jump at index 600 (89476271 -> 300, -89475971)" in caplog.text
+    assert "final contiguous run" in caplog.text
+
+
+def test_contiguous_sample_numbers_are_not_flagged(tmp_path, tree, caplog):
+    run_oephys(tmp_path / "out.arf", tree)
+    assert "jump" not in caplog.text
+    assert "sample numbers but" not in caplog.text
+
+
+def test_sample_number_count_mismatch_is_flagged(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    tree = build_tree(
+        tmp_path_factory.mktemp("short"),
+        gui_version,
+        sample_numbers=np.arange(SAMPLE_OFFSET, SAMPLE_OFFSET + NSAMPLES - 10),
+    )
+    run_oephys(tmp_path / "out.arf", tree)
+    assert f"{NSAMPLES - 10} sample numbers but {NSAMPLES} samples" in caplog.text
+
+
+def test_events_stepping_backward_across_a_clock_reset_are_flagged(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    # the first message of C182_4_1 carried the pre-reset clock
+    tree = build_tree(
+        tmp_path_factory.mktemp("evreset"),
+        gui_version,
+        event_samples=(89521870, 48367, 140080),
+    )
+    run_oephys(tmp_path / "out.arf", tree)
+    assert "step backward after row 0 (89521870 -> 48367)" in caplog.text
+
+
+def test_small_event_reordering_is_not_flagged(
+    tmp_path, tmp_path_factory, gui_version, caplog
+):
+    # network messages can arrive a millisecond out of order
+    tree = build_tree(
+        tmp_path_factory.mktemp("evjitter"),
+        gui_version,
+        event_samples=(1000, 970, 5000),
+    )
+    run_oephys(tmp_path / "out.arf", tree)
+    assert "step backward" not in caplog.text
+
+
+def test_ordered_events_are_not_flagged(tmp_path, tree, caplog):
+    run_oephys(tmp_path / "out.arf", tree)
+    assert "step backward" not in caplog.text
+
+
+def test_find_discontinuities_spans_chunks():
+    # a jump that lands on a chunk boundary must not be missed or doubled
+    x = np.concatenate([np.arange(10), np.arange(100, 110)])
+    for chunk in (3, 5, 9, 10, 100):
+        assert oephys.find_discontinuities(x, chunk=chunk) == [(9, 9, 100)]
+
+
 # ---------------------------------------------------------- unsupported inputs
 
 

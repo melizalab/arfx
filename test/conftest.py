@@ -266,6 +266,8 @@ def build_tree(
     nchannels=NCHANNELS,
     data=None,
     write_sample_numbers=True,
+    sample_numbers=None,
+    event_samples=(100, 500, 900),
     write_sync_messages=True,
     events="string",
     spikes=False,
@@ -284,6 +286,11 @@ def build_tree(
     `session` names that directory. Entry names are derived from it, so a test
     that puts two recordings in one archive has to give them distinct sessions,
     exactly as two real recordings would have distinct timestamps.
+
+    `sample_numbers` replaces the contiguous index the builder would otherwise
+    write, to fabricate an acquisition board whose counter jumped.
+
+    `event_samples` sets the sample numbers of the three events.
 
     `experiment` and `recording` place this recording within the session. Newer
     versions of the GUI write several of each into one session directory, so
@@ -324,7 +331,9 @@ def build_tree(
         data = continuous_ramp()
     data.tofile(cont_dir / "continuous.dat")
     if write_sample_numbers:
-        write_indices(cont_dir, np.arange(SAMPLE_OFFSET, SAMPLE_OFFSET + len(data)))
+        if sample_numbers is None:
+            sample_numbers = np.arange(SAMPLE_OFFSET, SAMPLE_OFFSET + len(data))
+        write_indices(cont_dir, sample_numbers)
     else:
         # spike sorting deletes the sample index but leaves the seconds file
         np.save(cont_dir / p["seconds_index"], np.arange(len(data)) / rate)
@@ -359,7 +368,7 @@ def build_tree(
     if events is not None:
         event_dir = base / "events" / event_folder.strip("/")
         event_dir.mkdir(parents=True)
-        write_indices(event_dir, [100, 500, 900])
+        write_indices(event_dir, event_samples)
         event_structure = dict(
             folder_name=event_folder,
             channel_name="Network messages" if events == "string" else "TTL input",
