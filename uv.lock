@@ -25,7 +25,7 @@ wheels = [
 
 [[package]]
 name = "arfx"
-version = "3.0.0"
+version = "3.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "arf" },
@@ -132,7 +132,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/19/a2/1a7cd11acce95ad9bc12993ea0044c89498895ae5e9995c868c11cf6686c/ewave-1.0.9.tar.gz", hash = "sha256:d115b8fee2f709c0e65f4975918a10c10c83a3b7b4ec3e957c4ab4c54f33feac", size = 210741, upload-time = "2024-08-29T15:56:54.678Z" }
 wheels = [
