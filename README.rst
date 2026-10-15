@@ -177,7 +177,10 @@ and its place within it, and each is timestamped from the wall-clock time in
 its own ``sync_messages.txt`` rather than from the session directory name,
 which gives only the start of the first recording. Older recordings have one
 recording per directory and no wall-clock time recorded, so they take the
-timestamp from the directory name.
+timestamp from the directory name (the last ``YYYY-MM-DD_HH-MM-SS`` in the
+path). For a directory with no such name, use ``--session-time DATETIME`` (ISO 8601)
+to supply it. The script exits before writing anything if a recording has no
+start time from any of these.
 
 arfx-collect-sampled
 ~~~~~~~~~~~~~~~~~~~~

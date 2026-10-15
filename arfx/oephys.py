@@ -346,6 +346,25 @@ def find_software_time(path: Path) -> datetime.datetime | None:
     return datetime.datetime.fromtimestamp(int(match.group("ms")) / 1000)
 
 
+_SESSION_TIME_RX = re.compile(r"(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})")
+
+
+def find_session_time(path: Path) -> datetime.datetime | None:
+    """The start of a session, from the timestamp in its directory name.
+
+    Takes the last timestamp in the path, which is the one nearest the
+    recording when directories are nested. Returns None if there is none or it
+    is not a valid date.
+    """
+    matches = _SESSION_TIME_RX.findall(str(path))
+    if not matches:
+        return None
+    try:
+        return datetime.datetime(*(int(v) for v in matches[-1]))
+    except ValueError:
+        return None
+
+
 def find_sync_time(path: Path, structure: dict, gui_version: Version) -> int | None:
     """Look up the start sample for a processor in sync_messages.txt.
 
@@ -452,6 +471,14 @@ def script(argv=None):
     )
 
     p.add_argument(
+        "--session-time",
+        metavar="DATETIME",
+        type=datetime.datetime.fromisoformat,
+        help="start of the session (ISO 8601), for recordings with no wall-clock "
+        "time in sync_messages.txt, used instead of the timestamp in the "
+        "directory name",
+    )
+    p.add_argument(
         "-f",
         required=True,
         metavar="FILE",
@@ -465,8 +492,6 @@ def script(argv=None):
     args = p.parse_args(argv)
     core.setup_log(log, args.verbose)
 
-    ts_regex = re.compile(r"(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})")
-
     fp_args = {}
     if args.dry_run:
         log.info("DRY RUN")
@@ -476,127 +501,131 @@ def script(argv=None):
     else:
         cont_channels = None
 
+    # Resolve every timestamp before opening the file, so that a recording with
+    # none leaves nothing behind. A session directory can hold several
+    # experiments and several recordings per experiment, and they do not all
+    # start when the session does, so the wall-clock time in each recording's
+    # sync_messages.txt is preferred to a session time, which only gives the
+    # start of the first.
+    recordings = []
+    for path in args.path:
+        # natsorted, so experiment10 follows experiment9 rather than
+        # experiment1, and the entries land in the order they were recorded
+        for structfile in natsorted(path.glob("**/structure.oebin")):
+            dir = structfile.parent
+            timestamp = find_software_time(dir)
+            if timestamp is None:
+                timestamp = args.session_time or find_session_time(path)
+                if timestamp is None:
+                    log.error(
+                        "can't determine a start time for %s: no wall-clock time in "
+                        "sync_messages.txt or timestamp in the directory name. "
+                        "Use --session-time.",
+                        dir,
+                    )
+                    p.exit(-1)
+                log.debug(
+                    "- no wall-clock time in sync_messages.txt, using %s", timestamp
+                )
+            recordings.append((path, dir, timestamp))
+
     with arf.open_file(args.arffile, "a", **fp_args) as fp:
         log.info("Opened '%s' for writing", args.arffile)
-        for path in args.path:
-            try:
-                m = ts_regex.search(str(path))
-                session_time = datetime.datetime(*(int(v) for v in m.groups()))
-            except (AttributeError, ValueError) as e:
-                log.error("can't parse timestamp from directory name %s: %s", path, e)
-                p.exit(-1)
-            # natsorted, so experiment10 follows experiment9 rather than
-            # experiment1, and the entries land in the order they were recorded
-            for structfile in natsorted(path.glob("**/structure.oebin")):
-                dir = structfile.parent
-                log.info("Reading from '%s':", dir)
-                rec = recording(dir)
+        for path, dir, timestamp in recordings:
+            log.info("Reading from '%s':", dir)
+            rec = recording(dir)
 
-                # A session directory can hold several experiments and several
-                # recordings per experiment, and they do not all start when the
-                # session does. Taking the timestamp from the directory name
-                # gave every one of them the start of the first.
-                timestamp = find_software_time(dir)
-                if timestamp is None:
-                    timestamp = session_time
-                    log.debug(
-                        "- no wall-clock time in sync_messages.txt, "
-                        "using the session directory's"
-                    )
+            # Named from the session directory down, not from the whole
+            # path: the name used to be str(dir) with the separators
+            # replaced, so the same recording imported from a different
+            # machine, mount point, or working directory produced a
+            # different entry name for identical data, and two such
+            # archives could not be merged without duplicates. Every
+            # component here comes from inside the recording tree, so the
+            # name is a property of the recording.
+            rec_name = "_".join((path.name, *dir.relative_to(path).parts))
+            if rec_name in fp:
+                # a consequence of the name being reproducible: importing
+                # the same recording twice is now something the file can
+                # detect, rather than quietly producing a second copy under
+                # a name that differed only by where the tree was mounted
+                log.error("- '%s' is already in %s, skipping", rec_name, args.arffile)
+                continue
+            entry = arf.create_entry(
+                fp,
+                name=rec_name,
+                timestamp=timestamp,
+                entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
+                **rec.attrs,
+            )
+            if args.attrs is not None:
+                arf.set_attributes(entry, **args.attrs)
+            log.info("- creating entry '%s'", rec_name)
 
-                # Named from the session directory down, not from the whole
-                # path: the name used to be str(dir) with the separators
-                # replaced, so the same recording imported from a different
-                # machine, mount point, or working directory produced a
-                # different entry name for identical data, and two such
-                # archives could not be merged without duplicates. Every
-                # component here comes from inside the recording tree, so the
-                # name is a property of the recording.
-                rec_name = "_".join((path.name, *dir.relative_to(path).parts))
-                if rec_name in fp:
-                    # a consequence of the name being reproducible: importing
-                    # the same recording twice is now something the file can
-                    # detect, rather than quietly producing a second copy under
-                    # a name that differed only by where the tree was mounted
-                    log.error(
-                        "- '%s' is already in %s, skipping", rec_name, args.arffile
-                    )
-                    continue
-                entry = arf.create_entry(
-                    fp,
-                    name=rec_name,
-                    timestamp=timestamp,
-                    entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
-                    **rec.attrs,
-                )
-                if args.attrs is not None:
-                    arf.set_attributes(entry, **args.attrs)
-                log.info("- creating entry '%s'", rec_name)
-
-                for name, dset in rec.datasets.items():
-                    if args.skip_empty and dset.size == 0:
-                        log.info("  - skipping empty dataset '%s'", name)
-                    elif isinstance(dset, continuous_dset):
-                        log.info("  - processing continuous dataset '%s'", dset.name)
-                        # first generate the datasets
-                        datasets = []
-                        for idx, info in enumerate(dset.channel_attrs):
-                            if (
-                                cont_channels is not None
-                                and info["channel_name"] not in cont_channels
-                            ):
-                                log.info(
-                                    "     - skipping unrequested channel '%s'",
-                                    info["channel_name"],
-                                )
-                                continue
+            for name, dset in rec.datasets.items():
+                if args.skip_empty and dset.size == 0:
+                    log.info("  - skipping empty dataset '%s'", name)
+                elif isinstance(dset, continuous_dset):
+                    log.info("  - processing continuous dataset '%s'", dset.name)
+                    # first generate the datasets
+                    datasets = []
+                    for idx, info in enumerate(dset.channel_attrs):
+                        if (
+                            cont_channels is not None
+                            and info["channel_name"] not in cont_channels
+                        ):
                             log.info(
-                                "     - creating dataset for channel '%s'",
+                                "     - skipping unrequested channel '%s'",
                                 info["channel_name"],
                             )
-                            # create an empty dataset and fill it in chunks
-                            tgt = entry.create_dataset(
-                                name=info["channel_name"],
-                                shape=(dset.nsamples,),
-                                dtype=dset.dtype,
-                                compression=args.compress,
-                                chunks=True,
-                            )
-                            chunksize = tgt.chunks[0]
-                            arf.set_attributes(
-                                tgt,
-                                datatype=args.datatype,
-                                offset=dset.offset,
-                                sampling_rate=dset.sampling_rate,
-                                **info,
-                            )
-                            datasets.append((idx, tgt))
-                        if len(datasets) == 0:
                             continue
                         log.info(
-                            "  - reading %d samples in chunks of %d",
-                            dset.nsamples,
-                            chunksize,
+                            "     - creating dataset for channel '%s'",
+                            info["channel_name"],
                         )
-                        expected = int(dset.nsamples / chunksize)
-                        for offset, chunk in tqdm(
-                            dset.iter_chunks(chunksize), total=expected, unit="chunk"
-                        ):
-                            nsamples, _ = chunk.shape
-                            for i, tgt in datasets:
-                                tgt[offset : offset + nsamples] = chunk[:, i]
-
-                    elif isinstance(dset, event_dset):
-                        log.info("  - processing event dataset '%s'", dset.name)
-                        arf.create_dataset(
-                            entry,
-                            name=dset.name,
-                            data=dset.data,
-                            datatype=arf.DataTypes.EVENT,
+                        # create an empty dataset and fill it in chunks
+                        tgt = entry.create_dataset(
+                            name=info["channel_name"],
+                            shape=(dset.nsamples,),
+                            dtype=dset.dtype,
+                            compression=args.compress,
+                            chunks=True,
+                        )
+                        chunksize = tgt.chunks[0]
+                        arf.set_attributes(
+                            tgt,
+                            datatype=args.datatype,
+                            offset=dset.offset,
                             sampling_rate=dset.sampling_rate,
-                            units=dset.units,
-                            **dset.attrs,
+                            **info,
                         )
+                        datasets.append((idx, tgt))
+                    if len(datasets) == 0:
+                        continue
+                    log.info(
+                        "  - reading %d samples in chunks of %d",
+                        dset.nsamples,
+                        chunksize,
+                    )
+                    expected = int(dset.nsamples / chunksize)
+                    for offset, chunk in tqdm(
+                        dset.iter_chunks(chunksize), total=expected, unit="chunk"
+                    ):
+                        nsamples, _ = chunk.shape
+                        for i, tgt in datasets:
+                            tgt[offset : offset + nsamples] = chunk[:, i]
+
+                elif isinstance(dset, event_dset):
+                    log.info("  - processing event dataset '%s'", dset.name)
+                    arf.create_dataset(
+                        entry,
+                        name=dset.name,
+                        data=dset.data,
+                        datatype=arf.DataTypes.EVENT,
+                        sampling_rate=dset.sampling_rate,
+                        units=dset.units,
+                        **dset.attrs,
+                    )
 
 
 if __name__ == "__main__":

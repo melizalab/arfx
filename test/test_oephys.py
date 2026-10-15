@@ -350,13 +350,60 @@ def test_channel_metadata_count_mismatch_warns(
     assert "don't match" in caplog.text
 
 
-def test_unparseable_directory_name_exits(tmp_path, tmp_path_factory, gui_version):
-    root = tmp_path_factory.mktemp("badname")
-    tree = build_tree(root, gui_version)
+def undated(tree):
     renamed = tree.parent / "no_timestamp_here"
     tree.rename(renamed)
+    return renamed
+
+
+def test_undated_directory_needs_no_name_when_sync_messages_has_the_time(
+    tmp_path, tmp_path_factory
+):
+    tree = undated(build_tree(tmp_path_factory.mktemp("badname"), NEW))
+    tgt = run_oephys(tmp_path / "out.arf", tree)
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert arf.timestamp_to_datetime(entry.attrs["timestamp"]) == (
+            EXPECTED_SOFTWARE_TIME
+        )
+
+
+def test_undated_directory_without_wall_clock_time_exits_and_writes_nothing(
+    tmp_path, tmp_path_factory
+):
+    tree = undated(build_tree(tmp_path_factory.mktemp("badname"), OLD))
     with pytest.raises(SystemExit):
-        run_oephys(tmp_path / "out.arf", renamed)
+        run_oephys(tmp_path / "out.arf", tree)
+    assert not (tmp_path / "out.arf").exists()
+
+
+def test_session_time_stands_in_for_the_directory_name(tmp_path, tmp_path_factory):
+    tree = undated(build_tree(tmp_path_factory.mktemp("badname"), OLD))
+    tgt = run_oephys(
+        tmp_path / "out.arf", tree, extra=["--session-time", "2026-10-12T09:30:00"]
+    )
+    with arf.open_file(tgt, "r") as fp:
+        stamp = arf.timestamp_to_datetime(only_entry(fp).attrs["timestamp"])
+    assert stamp == datetime.datetime(2026, 10, 12, 9, 30, 0)
+
+
+def test_session_time_does_not_override_the_wall_clock_time(tmp_path, tmp_path_factory):
+    tree = build_tree(tmp_path_factory.mktemp("wallclock"), NEW)
+    tgt = run_oephys(
+        tmp_path / "out.arf", tree, extra=["--session-time", "2000-01-01T00:00:00"]
+    )
+    with arf.open_file(tgt, "r") as fp:
+        stamp = arf.timestamp_to_datetime(only_entry(fp).attrs["timestamp"])
+    assert stamp == EXPECTED_SOFTWARE_TIME
+
+
+def test_find_session_time_takes_the_innermost_timestamp(tmp_path):
+    path = tmp_path / "2020-01-01_00-00-00" / "c182_2026-10-12_12-30-45"
+    assert oephys.find_session_time(path) == datetime.datetime(2026, 10, 12, 12, 30, 45)
+
+
+def test_find_session_time_rejects_an_impossible_date(tmp_path):
+    assert oephys.find_session_time(tmp_path / "x_2026-13-45_25-61-61") is None
 
 
 # ----------------------------------------------------------------- CLI options
