@@ -82,13 +82,20 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
         }
       ]
 
-    If not consistent across entries, logs an error and returns None. If
+    If not consistent across entries, or if channels names a dataset an entry
+    lacks or names one twice, logs an error and returns None. If
     sampling rate and units are not consistent within an entry, logs a warning.
 
     """
     import h5py as h5
 
     log.info("checking entry consistency")
+    if channels is not None:
+        repeated = sorted({c for c in channels if channels.count(c) > 1})
+        if repeated:
+            # it would be written once per mention, giving too many columns
+            log.error("channels listed more than once: %s", ", ".join(repeated))
+            return
     entry_names = []
     channel_props = None
     for entry_name in arf.keys_by_creation(arfp):
@@ -107,6 +114,16 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
             )
             return
         props = channel_properties(entry, channels, predicate)
+        missing = [c for c in channels or () if c not in props]
+        if missing:
+            # a dropped channel shifts every later column, and the output still
+            # looks like a valid file to a sorter that was told the full count
+            log.error(
+                "requested channels are not sampled datasets in entry %s: %s",
+                entry_name,
+                ", ".join(missing),
+            )
+            return
         sample_counts = set(v.pop("samples") for v in props.values())
         # chunksize is chosen by h5py from each dataset's own shape, so entries
         # of different lengths get different chunk sizes while being perfectly

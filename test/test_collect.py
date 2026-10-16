@@ -300,6 +300,35 @@ def test_collect_unmatched_channels_exits_nonzero(tmp_path, sampled_arf_file, ca
     assert not out.exists()
 
 
+def test_collect_missing_channel_exits_nonzero(tmp_path, sampled_arf_file, caplog):
+    # a dropped column shifts every later one, and the file still looks valid
+    out = tmp_path / "out.dat"
+    args = ["-c", "chan_a", "chanx", "chan_b"]
+    assert collect.collect_sampled_script([str(sampled_arf_file), str(out), *args]) == 1
+    assert "chanx" in caplog.text
+    assert not out.exists()
+
+
+def test_collect_missing_channel_in_channel_file_exits_nonzero(
+    tmp_path, sampled_arf_file, caplog
+):
+    listing = tmp_path / "channels.txt"
+    listing.write_text("chan_a\nchanx\n")
+    out = tmp_path / "out.dat"
+    args = ["-C", str(listing)]
+    assert collect.collect_sampled_script([str(sampled_arf_file), str(out), *args]) == 1
+    assert "chanx" in caplog.text
+    assert not out.exists()
+
+
+def test_collect_repeated_channel_exits_nonzero(tmp_path, sampled_arf_file, caplog):
+    out = tmp_path / "out.dat"
+    args = ["-c", "chan_a", "chan_a"]
+    assert collect.collect_sampled_script([str(sampled_arf_file), str(out), *args]) == 1
+    assert "chan_a" in caplog.text
+    assert not out.exists()
+
+
 def test_collect_file_with_no_sampled_data_exits_nonzero(tmp_path, caplog):
     path = tmp_path / "events.arf"
     with arf.open_file(path, "w") as fp:
