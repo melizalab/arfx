@@ -35,9 +35,20 @@ def all_items_equal(dict, fun):
     return len(ss) <= 1
 
 
+def tracks_creation_order(group):
+    """True if the group records the order its members were created in"""
+    flags = group.id.get_create_plist().get_link_creation_order()
+    return bool(flags & 1)
+
+
 def channel_properties(entry, channels=None, predicate=any_type):
-    """Returns a dict with channel names and required channel properties"""
-    return {
+    """Returns a dict with channel names and required channel properties
+
+    The dict is in the order the channels will be written: the order of
+    `channels` if given, otherwise the order of the entry's datasets (creation
+    order, for a file that tracks it).
+    """
+    props = {
         name: {
             "sampling_rate": dset.attrs.get("sampling_rate", None),
             "units": dset.attrs.get("units", None),
@@ -49,6 +60,9 @@ def channel_properties(entry, channels=None, predicate=any_type):
         for name, dset in entry.items()
         if predicate(dset) and (channels is None or name in channels)
     }
+    if channels is not None:
+        props = {name: props[name] for name in channels if name in props}
+    return props
 
 
 def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_type):
@@ -75,7 +89,6 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
     import h5py as h5
 
     log.info("checking entry consistency")
-    # FIXME catch error when file does not track creation order
     entry_names = []
     channel_props = None
     for entry_name in arf.keys_by_creation(arfp):
@@ -84,6 +97,15 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
         entry = arfp[entry_name]
         if not isinstance(entry, h5.Group):
             continue
+        if channels is None and not tracks_creation_order(entry):
+            # without the index h5py iterates alphabetically, which would put
+            # CH10 before CH2 and silently transpose channels in the output
+            log.error(
+                "entry %s does not track creation order, so the channel order is "
+                "unknown; list the channels explicitly with -c/-C",
+                entry_name,
+            )
+            return
         props = channel_properties(entry, channels, predicate)
         sample_counts = set(v.pop("samples") for v in props.values())
         # chunksize is chosen by h5py from each dataset's own shape, so entries
@@ -99,7 +121,7 @@ def check_entry_consistency(arfp, entries=None, channels=None, predicate=any_typ
             return
         if channel_props is None:
             channel_props = props
-        elif props != channel_props:
+        elif list(props.items()) != list(channel_props.items()):
             log.error("channels in entry %s do not match", entry_name)
             return
         entry_names.append(entry_name)
@@ -246,7 +268,7 @@ def collect_sampled_script(argv=None):
         else:
             dtype = args.dtype
         log.info(" - channels (%d):", nchannels)
-        for cname in natsorted(channel_props):
+        for cname in channel_props:
             log.info("    - %s", cname)
         if args.mountain_params:
             import json
