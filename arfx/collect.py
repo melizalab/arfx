@@ -114,7 +114,7 @@ def iter_entry_chunks(entry, channels, predicate):
     dtype = first(props, operator.itemgetter("dtype"))
     size = first(props, operator.itemgetter("chunksize"))
     log.info("    - '%s' -> %d samples", entry.name, nsamples)
-    for i in tqdm(range(0, nsamples, size), unit="chunk"):
+    for i in tqdm(range(0, nsamples, size), unit="chunk", dynamic_ncols=True):
         n = min(size, nsamples - i)
         out = np.empty((n, nchannels), dtype=dtype)
         log.debug("            - %d - %d", i, i + n)

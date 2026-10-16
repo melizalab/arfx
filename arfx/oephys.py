@@ -459,7 +459,10 @@ def copy_datasets(entry, rec, *, skip_empty, compress, datatype, cont_channels):
             )
             expected = int(dset.nsamples / chunksize)
             for offset, chunk in tqdm(
-                dset.iter_chunks(chunksize), total=expected, unit="chunk"
+                dset.iter_chunks(chunksize),
+                total=expected,
+                unit="chunk",
+                dynamic_ncols=True,
             ):
                 nsamples, _ = chunk.shape
                 for i, tgt in datasets:
