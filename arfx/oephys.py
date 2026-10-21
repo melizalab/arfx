@@ -7,6 +7,7 @@ https://open-ephys.atlassian.net/wiki/spaces/OEW/pages/166789121/Flat+binary+for
 """
 
 import datetime
+import json
 import logging
 import re
 from pathlib import Path
@@ -18,7 +19,7 @@ from natsort import natsorted
 from packaging.version import Version
 
 from arfx import core
-from arfx.nbank import USER_ATTRIBUTES
+from arfx.nbank import RENAMED, USER_ATTRIBUTES
 
 log = logging.getLogger("arfx-oephys")
 
@@ -550,6 +551,82 @@ def animal_id(value: str) -> str:
         return value
 
 
+# The stimulus presenter (oeaudio-present) logs the recording's metadata to the
+# network events text stream as "metadata: {...}". These match the names that
+# stream's dataset gets in either GUI generation.
+_MESSAGE_DSET_RX = re.compile(r"MessageCenter|Network_Events-.*_TEXT_")
+_METADATA_RX = re.compile(r"metadata: (\{.*\})")
+
+
+def presenter_metadata(rec: "recording") -> dict:
+    """The metadata the stimulus presenter logged in a recording, under the
+    registry's names, or {} if there is none. The first metadata message is
+    used. The animal is left out: the presenter has its band name, which the
+    recording is already named after, and the registry needs its identifier."""
+    for name, dset in rec.datasets.items():
+        if _MESSAGE_DSET_RX.match(name) is None:
+            continue
+        for message in dset.data["message"]:
+            if isinstance(message, bytes):
+                message = message.decode("utf-8", errors="replace")
+            m = _METADATA_RX.match(message)
+            if m is None:
+                continue
+            try:
+                metadata = json.loads(m.group(1))
+            except json.JSONDecodeError:
+                log.warning("- warning: unreadable metadata message in %s", name)
+                continue
+            out = {}
+            for key, value in metadata.items():
+                key = RENAMED.get(key, key)
+                if key == "animal":
+                    continue
+                if not isinstance(value, (str, int, float, bool)):
+                    log.warning(
+                        "- warning: presenter metadata %s=%r can't be stored; skipped",
+                        key,
+                        value,
+                    )
+                    continue
+                out[key] = value
+            return out
+    return {}
+
+
+def _same_value(a, b) -> bool:
+    return isinstance(a, bool) == isinstance(b, bool) and a == b
+
+
+def merge_attributes(from_presenter: dict, given: dict, *, override=False) -> dict:
+    """The entry attributes from the presenter's metadata and the given ones
+    (-k, --experimenter). Given names are compared under the registry's (bird
+    is animal). A field with different values is an error (ValueError), unless
+    override, in which case the given value is used."""
+    given_as = {RENAMED.get(key, key): key for key in given}
+    conflicts = sorted(
+        key
+        for key, value in from_presenter.items()
+        if key in given_as and not _same_value(value, given[given_as[key]])
+    )
+    if conflicts and not override:
+        details = "; ".join(
+            f"{key}: {from_presenter[key]!r} logged, {given[given_as[key]]!r} given"
+            for key in conflicts
+        )
+        raise ValueError(f"given attributes don't match the presenter's ({details})")
+    for key in conflicts:
+        log.info(
+            "- %s: using %r instead of %r from the presenter",
+            key,
+            given[given_as[key]],
+            from_presenter[key],
+        )
+    merged = {k: v for k, v in from_presenter.items() if k not in given_as}
+    merged.update(given)
+    return merged
+
+
 # options for the registry's core fields, and the -k names they replace
 CORE_FIELD_KEYS = {"experimenter": ("experimenter",), "animal": ("animal", "bird")}
 
@@ -607,6 +684,12 @@ def script(argv=None):
         "--animal",
         metavar="ID",
         help="the full identifier of the animal the data came from",
+    )
+    p.add_argument(
+        "--override-presenter-metadata",
+        action="store_true",
+        help="where -k or --experimenter differs from the metadata the stimulus "
+        "presenter logged, use the given values",
     )
     p.add_argument(
         "-T",
@@ -693,15 +776,23 @@ def script(argv=None):
                 log.debug(
                     "- no wall-clock time in sync_messages.txt, using %s", timestamp
                 )
-            recordings.append((path, dir, timestamp))
+            log.info("Reading from '%s':", dir)
+            rec = recording(dir)
+            try:
+                attrs = merge_attributes(
+                    presenter_metadata(rec),
+                    args.attrs,
+                    override=args.override_presenter_metadata,
+                )
+            except ValueError as e:
+                log.error("- %s; use --override-presenter-metadata to keep them", e)
+                p.exit(-1)
+            recordings.append((path, dir, timestamp, rec, attrs))
 
     skipped = []
     with arf.open_file(args.arffile, "a", **fp_args) as fp:
         log.info("Opened '%s' for writing", args.arffile)
-        for path, dir, timestamp in recordings:
-            log.info("Reading from '%s':", dir)
-            rec = recording(dir)
-
+        for path, dir, timestamp, rec, attrs in recordings:
             # Named from the session directory down, not from the whole
             # path: the name used to be str(dir) with the separators
             # replaced, so the same recording imported from a different
@@ -732,13 +823,14 @@ def script(argv=None):
                     entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
                     **rec.attrs,
                 )
-                # the names of the attributes that came from -k, so that
-                # arfx.nbank can tell them from the open-ephys structure
-                # and ARF's own. Written even when empty, which is what
-                # distinguishes a file with no -k from one that predates this.
-                arf.set_attributes(entry, **(args.attrs or {}))
+                # the names of the attributes that came from -k or the
+                # presenter, so that arfx.nbank can tell them from the
+                # open-ephys structure and ARF's own. Written even when empty,
+                # which is what distinguishes a file with none from one that
+                # predates this.
+                arf.set_attributes(entry, **attrs)
                 entry.attrs[USER_ATTRIBUTES] = np.array(
-                    sorted(args.attrs or ()), dtype=h5py.string_dtype()
+                    sorted(attrs), dtype=h5py.string_dtype()
                 )
                 log.info("- creating entry '%s'", rec_name)
                 copy_datasets(

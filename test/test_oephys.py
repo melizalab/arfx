@@ -38,7 +38,7 @@ from conftest import (
 )
 from packaging.version import Version
 
-from arfx import oephys
+from arfx import nbank, oephys
 
 # ------------------------------------------------------------------- happy path
 
@@ -480,6 +480,112 @@ def test_option_and_k_for_the_same_field(tmp_path, tree, extra):
     with pytest.raises(SystemExit):
         run_oephys(tgt, tree, extra=extra)
     assert not tgt.exists()
+
+
+# what oeaudio-present logged for P314_1_6
+PRESENTER = {
+    "animal": "P314",
+    "experimenter": "tbyron",
+    "experiment": "selectivity-chorus-short",
+    "hemisphere": "L",
+    "pen": 1,
+    "site": 4,
+    "x": 893.4,
+    "y": -749.5,
+    "z": -2500,
+}
+
+
+def presenter_tree(tmp_path_factory, gui_version, metadata=PRESENTER, text=None):
+    if text is None:
+        text = "metadata: " + json.dumps(metadata)
+    root = tmp_path_factory.mktemp("presenter")
+    return build_tree(root, gui_version, messages=(b"start", text.encode(), b"stop"))
+
+
+def test_presenter_metadata_becomes_attributes(tmp_path, tmp_path_factory, gui_version):
+    """Under the registry's names, without the presenter's animal (a band
+    name), and listed so that the neurobank reader registers them."""
+    tree = presenter_tree(tmp_path_factory, gui_version)
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["--animal", ANIMAL])
+    expected = {
+        "animal": ANIMAL,
+        "experimenter": "tbyron",
+        "protocol": "selectivity-chorus-short",
+        "hemisphere": "L",
+        "pen": 1,
+        "site": 4,
+        "x": 893.4,
+        "y": -749.5,
+        "z": -2500,
+    }
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert {k: entry.attrs[k] for k in expected} == expected
+        assert "experiment" not in entry.attrs
+        assert sorted(entry.attrs["user_attributes"]) == sorted(expected)
+    metadata = nbank.read_metadata(tgt)
+    assert {k: metadata[k] for k in expected} == expected
+
+
+def test_given_attributes_matching_the_presenter(tmp_path, tmp_path_factory):
+    tree = presenter_tree(tmp_path_factory, NEW)
+    extra = ["--experimenter", "tbyron", "-k", "pen=1", "-k", "hemisphere=L"]
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=extra)
+    with arf.open_file(tgt, "r") as fp:
+        assert only_entry(fp).attrs["pen"] == 1
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["-k", "pen=unknown"],
+        ["-k", "pen=true"],
+        ["--experimenter", "someone"],
+        # compared under the registry's name for it
+        ["-k", "experiment=other"],
+    ],
+)
+def test_given_attributes_differing_from_the_presenter(
+    tmp_path, tmp_path_factory, caplog, extra
+):
+    tree = presenter_tree(tmp_path_factory, NEW)
+    tgt = tmp_path / "out.arf"
+    with pytest.raises(SystemExit):
+        run_oephys(tgt, tree, extra=extra)
+    assert "--override-presenter-metadata" in caplog.text
+    assert not tgt.exists()
+
+
+def test_override_presenter_metadata(tmp_path, tmp_path_factory, caplog):
+    tree = presenter_tree(tmp_path_factory, NEW)
+    extra = ["--override-presenter-metadata", "-k", "pen=2"]
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=extra)
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert entry.attrs["pen"] == 2
+        assert entry.attrs["site"] == 4
+    assert "using 2 instead of 1" in caplog.text
+
+
+def test_unreadable_presenter_metadata_is_a_warning(tmp_path, tmp_path_factory, caplog):
+    tree = presenter_tree(tmp_path_factory, NEW, text='metadata: {"pen": 1,}')
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["-k", "pen=2"])
+    assert "unreadable metadata message" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        assert only_entry(fp).attrs["pen"] == 2
+
+
+def test_presenter_metadata_that_cant_be_stored_is_skipped(
+    tmp_path, tmp_path_factory, caplog
+):
+    tree = presenter_tree(tmp_path_factory, NEW, metadata={"pen": 1, "pos": [1, 2]})
+    tgt = run_oephys(tmp_path / "out.arf", tree)
+    assert "can't be stored" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert entry.attrs["pen"] == 1
+        assert "pos" not in entry.attrs
 
 
 def test_skip_empty(tmp_path, tmp_path_factory, gui_version, caplog):

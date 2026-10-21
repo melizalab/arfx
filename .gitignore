@@ -3,7 +3,7 @@
 /dist/
 /setuptools-*
 /.venv/
-.coverage
+.coverage*
 *.pyc
 *.so
 *.arf

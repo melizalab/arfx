@@ -4,8 +4,9 @@
 Registered as an entry point in the group ``nbank.metadata_readers``, for the
 ``extracellular-arf`` and ``eeg-arf`` dtypes. The reader checks that a file is
 what `arfx-oephys` writes and returns the metadata for the registry: the
-attributes given with -k (and --experimenter, --animal), and the versions of
-arfx-oephys that wrote the entries. It does not import neurobank.
+attributes given with -k (and --experimenter, --animal) or logged by the
+stimulus presenter, and the versions of arfx-oephys that wrote the entries.
+It does not import neurobank.
 
 """
 
@@ -17,7 +18,8 @@ import arf
 import h5py
 import numpy as np
 
-#: entry attribute listing the names of the attributes that came from -k
+#: entry attribute listing the names of the attributes that came from -k or
+#: from the stimulus presenter's metadata
 USER_ATTRIBUTES = "user_attributes"
 
 # Files written before arfx-oephys recorded USER_ATTRIBUTES can't say which of

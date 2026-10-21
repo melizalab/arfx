@@ -7,6 +7,11 @@
   animal's full identifier (a UUID); anything else is a warning. Giving a
   field both ways (e.g. `--animal` and `-k bird`) is an error.
 - The neurobank reader is also registered for the `eeg-arf` dtype.
+- `arfx-oephys` stores the metadata the stimulus presenter logged (pen, site,
+  coordinates, etc.; `experiment` as `protocol`) as entry attributes, so the
+  neurobank reader registers them. The presenter's animal (a band name) is not
+  used. A `-k` or `--experimenter` value that differs from the logged one is an
+  error, unless `--override-presenter-metadata` is given.
 
 ## 3.1.0
 

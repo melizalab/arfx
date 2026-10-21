@@ -271,6 +271,7 @@ def build_tree(
     sampling_rate=None,
     write_sync_messages=True,
     events="string",
+    messages=(b"start", b"mid", b"stop"),
     spikes=False,
     channel_metadata_count=None,
     session=TIMESTAMP_DIR,
@@ -293,7 +294,8 @@ def build_tree(
 
     `sampling_rate` overrides the continuous stream's rate.
 
-    `event_samples` sets the sample numbers of the three events.
+    `event_samples` sets the sample numbers of the three events, and `messages`
+    the text of the string events.
 
     `experiment` and `recording` place this recording within the session. Newer
     versions of the GUI write several of each into one session directory, so
@@ -386,7 +388,7 @@ def build_tree(
             # message the GUI allows rather than to the content
             np.save(
                 event_dir / "text.npy",
-                np.array([b"start", b"mid", b"stop"], dtype="|S513"),
+                np.array(messages, dtype="|S513"),
             )
             if is_old(gui_version):
                 np.save(event_dir / "channels.npy", np.array([0, 0, 0]))
