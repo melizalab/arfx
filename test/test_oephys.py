@@ -436,6 +436,52 @@ def test_extra_attributes_and_datatype(tmp_path, tree):
         assert entry["CH1"].attrs["datatype"] == arf.DataTypes.EXTRAC_HP
 
 
+ANIMAL = "b1360fc4-34b8-41cb-a7c7-ec5d774238e9"
+
+
+def test_experimenter_and_animal(tmp_path, tree):
+    """--experimenter and --animal are stored as strings and listed with the -k
+    attributes, so the neurobank reader registers them; the animal is a UUID in
+    its canonical form."""
+    tgt = run_oephys(
+        tmp_path / "out.arf",
+        tree,
+        extra=["--experimenter", "1234", "--animal", ANIMAL.upper(), "-k", "pen=1"],
+    )
+    with arf.open_file(tgt, "r") as fp:
+        entry = only_entry(fp)
+        assert entry.attrs["experimenter"] == "1234"
+        assert entry.attrs["animal"] == ANIMAL
+        assert sorted(entry.attrs["user_attributes"]) == [
+            "animal",
+            "experimenter",
+            "pen",
+        ]
+
+
+def test_animal_not_a_uuid_is_a_warning(tmp_path, tree, caplog):
+    """A test recording may have no real animal; it just can't be deposited."""
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["--animal", "C194"])
+    assert "not a full identifier (UUID)" in caplog.text
+    with arf.open_file(tgt, "r") as fp:
+        assert only_entry(fp).attrs["animal"] == "C194"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        ["--animal", ANIMAL, "-k", f"animal={ANIMAL}"],
+        ["--animal", ANIMAL, "-k", "bird=C194"],
+        ["--experimenter", "a", "-k", "experimenter=a"],
+    ],
+)
+def test_option_and_k_for_the_same_field(tmp_path, tree, extra):
+    tgt = tmp_path / "out.arf"
+    with pytest.raises(SystemExit):
+        run_oephys(tgt, tree, extra=extra)
+    assert not tgt.exists()
+
+
 def test_skip_empty(tmp_path, tmp_path_factory, gui_version, caplog):
     root = tmp_path_factory.mktemp("empty")
     tree = build_tree(

@@ -23,7 +23,8 @@ def test_registered_as_entry_point():
     from importlib.metadata import entry_points
 
     eps = entry_points(group="nbank.metadata_readers")
-    assert eps["extracellular-arf"].load() is nbank.read_metadata
+    for dtype in ("extracellular-arf", "eeg-arf"):
+        assert eps[dtype].load() is nbank.read_metadata
 
 
 def test_reads_the_attributes_given_with_k(tmp_path, tree):
@@ -50,6 +51,16 @@ def test_reads_the_attributes_given_with_k(tmp_path, tree):
         "processed_by": "org.meliza.arfx/arfx-oephys " + __version__,
     }
     json.dumps(md)
+
+
+def test_reads_experimenter_and_animal_options(tmp_path, tree):
+    animal = "b1360fc4-34b8-41cb-a7c7-ec5d774238e9"
+    tgt = run_oephys(
+        tmp_path / "out.arf",
+        tree,
+        extra=["--experimenter", "tbyron", "--animal", animal],
+    )
+    assert read(tgt) == {"experimenter": "tbyron", "animal": animal} | PROCESSED_BY
 
 
 def test_only_user_attributes_are_returned(tmp_path, tree):

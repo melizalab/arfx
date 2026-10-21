@@ -1,10 +1,11 @@
 # -*- mode: python -*-
-"""Metadata reader for neurobank: ``extracellular-arf`` files made by arfx-oephys
+"""Metadata reader for neurobank: ARF files made by arfx-oephys
 
-Registered as an entry point in the group ``nbank.metadata_readers``. The reader
-checks that a file is what `arfx-oephys` writes and returns the metadata for the
-registry: the attributes given with -k, and the versions of arfx-oephys that
-wrote the entries. It does not import neurobank.
+Registered as an entry point in the group ``nbank.metadata_readers``, for the
+``extracellular-arf`` and ``eeg-arf`` dtypes. The reader checks that a file is
+what `arfx-oephys` writes and returns the metadata for the registry: the
+attributes given with -k (and --experimenter, --animal), and the versions of
+arfx-oephys that wrote the entries. It does not import neurobank.
 
 """
 

@@ -1,5 +1,13 @@
 # Release notes
 
+## 3.1.1
+
+- `arfx-oephys --experimenter USER --animal ID`, for the fields neurobank
+  registers as the experimenter and the animal. `--animal` should be the
+  animal's full identifier (a UUID); anything else is a warning. Giving a
+  field both ways (e.g. `--animal` and `-k bird`) is an error.
+- The neurobank reader is also registered for the `eeg-arf` dtype.
+
 ## 3.1.0
 
 - A metadata reader for neurobank (`arfx.nbank`, registered for the

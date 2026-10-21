@@ -532,6 +532,28 @@ def check_matches_file(fp, rec, cont_channels=None):
         )
 
 
+def animal_id(value: str) -> str:
+    """An animal's identifier, in canonical form if it's a UUID. The lab's
+    animals are identified by UUID, so anything else (a band name, a truncated
+    id) is warned about: it can't be deposited, which is fine for a test
+    recording."""
+    import uuid
+
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        log.warning(
+            "--animal '%s' is not a full identifier (UUID); the registry won't "
+            "accept it",
+            value,
+        )
+        return value
+
+
+# options for the registry's core fields, and the -k names they replace
+CORE_FIELD_KEYS = {"experimenter": ("experimenter",), "animal": ("animal", "bird")}
+
+
 def script(argv=None):
     import argparse
 
@@ -577,6 +599,16 @@ def script(argv=None):
         ),
     )
     p.add_argument(
+        "--experimenter",
+        metavar="USER",
+        help="the person who collected or produced the data (a registry username)",
+    )
+    p.add_argument(
+        "--animal",
+        metavar="ID",
+        help="the full identifier of the animal the data came from",
+    )
+    p.add_argument(
         "-T",
         default=arf.DataTypes.UNDEFINED,
         metavar="DATATYPE",
@@ -613,6 +645,18 @@ def script(argv=None):
 
     args = p.parse_args(argv)
     core.setup_log(log, args.verbose)
+    # stored like -k attributes, and so listed in USER_ATTRIBUTES
+    args.attrs = dict(args.attrs or {})
+    for field, keys in CORE_FIELD_KEYS.items():
+        value = getattr(args, field)
+        if value is None:
+            continue
+        if field == "animal":
+            value = animal_id(value)
+        for key in keys:
+            if key in args.attrs:
+                p.error(f"--{field} and -k {key} both given; use --{field}")
+        args.attrs[field] = value
 
     fp_args = {}
     if args.dry_run:

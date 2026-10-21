@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "arfx"
-version = "3.1.0"
+version = "3.1.1"
 description = "Advanced Recording Format Tools"
 readme = "README.rst"
 requires-python = ">=3.11"
@@ -59,6 +59,7 @@ arfx-oephys = "arfx.oephys:script"
 
 [project.entry-points."nbank.metadata_readers"]
 extracellular-arf = "arfx.nbank:read_metadata"
+eeg-arf = "arfx.nbank:read_metadata"
 
 [dependency-groups]
 dev = [
