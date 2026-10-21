@@ -12,11 +12,13 @@ import re
 from pathlib import Path
 
 import arf
+import h5py
 import numpy as np
 from natsort import natsorted
 from packaging.version import Version
 
 from arfx import core
+from arfx.nbank import USER_ATTRIBUTES
 
 log = logging.getLogger("arfx-oephys")
 
@@ -686,8 +688,14 @@ def script(argv=None):
                     entry_creator="org.meliza.arfx/arfx-oephys " + core.__version__,
                     **rec.attrs,
                 )
-                if args.attrs is not None:
-                    arf.set_attributes(entry, **args.attrs)
+                # the names of the attributes that came from -k, so that
+                # arfx.nbank can tell them from the open-ephys structure
+                # and ARF's own. Written even when empty, which is what
+                # distinguishes a file with no -k from one that predates this.
+                arf.set_attributes(entry, **(args.attrs or {}))
+                entry.attrs[USER_ATTRIBUTES] = np.array(
+                    sorted(args.attrs or ()), dtype=h5py.string_dtype()
+                )
                 log.info("- creating entry '%s'", rec_name)
                 copy_datasets(
                     entry,

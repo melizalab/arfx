@@ -10,10 +10,6 @@
 *.wav
 /examples/
 .DS_Store
-CLAUDE.md
-/.claude/
 COMMIT_MSG
-arf-CLAUDE.md
-session
 arfx-plugin-pcmseqio/
 TAG_MSG

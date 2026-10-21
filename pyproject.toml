@@ -57,6 +57,8 @@ arfx-oephys = "arfx.oephys:script"
 ".mda" = "arfx.mdaio:mdafile"
 ".wav" = "ewave:wavfile"
 
+[project.entry-points."nbank.metadata_readers"]
+extracellular-arf = "arfx.nbank:read_metadata"
 
 [dependency-groups]
 dev = [
