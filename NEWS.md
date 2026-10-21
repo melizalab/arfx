@@ -1,5 +1,14 @@
 # Release notes
 
+## 3.1.0
+
+- A metadata reader for neurobank (`arfx.nbank`, registered for the
+  `extracellular-arf` dtype), so `nbank deposit` takes the metadata of an
+  arfx-oephys file from the file. It registers the attributes given to
+  arfx-oephys with `-k` that have the same value in every entry, and
+  `processed_by`: the arfx-oephys versions that wrote the entries. arfx-oephys
+  now records which attributes came from `-k` (`user_attributes` in each entry).
+
 ## 3.0.0
 
 Requires `arf>=3.0.0,<4`. The major version is the dependency: arfx's major

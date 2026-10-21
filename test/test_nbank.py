@@ -42,11 +42,11 @@ def test_reads_the_attributes_given_with_k(tmp_path, tree):
         ],
     )
     md = read(tgt)
-    # pen is not a searched field, so it stays in the file
     assert md == {
         "animal": "0d1a2b3c-0000-4000-8000-000000000001",
         "experimenter": "dmeliza",
         "recording": "r1",
+        "pen": 1,
         "processed_by": "org.meliza.arfx/arfx-oephys " + __version__,
     }
     json.dumps(md)
@@ -183,6 +183,44 @@ def test_numpy_and_bytes_become_json(tmp_path, tree):
     }
     assert type(md["recording"]) is int
     json.dumps(md, allow_nan=False)
+
+
+@pytest.mark.parametrize(
+    ("old", "new"), [("bird", "animal"), ("experiment", "protocol")]
+)
+def test_old_and_new_names_disagreeing_are_refused(tmp_path, tree, old, new):
+    tgt = run_oephys(
+        tmp_path / "out.arf", tree, extra=["-k", f"{old}=x", "-k", f"{new}=y"]
+    )
+    with pytest.raises(ValueError, match=old):
+        read(tgt)
+
+
+def test_old_and_new_names_agreeing(tmp_path, tree):
+    tgt = run_oephys(
+        tmp_path / "out.arf", tree, extra=["-k", "bird=x", "-k", "animal=x"]
+    )
+    assert read(tgt) == {"animal": "x"} | PROCESSED_BY
+
+
+@pytest.mark.parametrize("value", ["1", "[1, 2]"])
+def test_processed_by_not_a_string_is_refused(tmp_path, tree, value):
+    tgt = run_oephys(tmp_path / "out.arf", tree, extra=["-k", f"processed_by={value}"])
+    with pytest.raises(ValueError, match="processed_by"):
+        read(tgt)
+
+
+@pytest.mark.parametrize("rate", ["fast", np.array([1.0, 2.0])])
+def test_sampling_rate_not_a_number(tmp_path, rate):
+    p = tmp_path / "x.arf"
+    make_sampled_file(p, nentries=1)
+    with h5py.File(p, "a") as fp:
+        for entry in fp.values():
+            for dset in entry.values():
+                if "sampling_rate" in dset.attrs:
+                    dset.attrs["sampling_rate"] = rate
+    with pytest.raises(ValueError, match="sampling rate"):
+        read(p)
 
 
 def test_not_hdf5(tmp_path):

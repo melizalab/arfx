@@ -3,7 +3,8 @@
 
 Registered as an entry point in the group ``nbank.metadata_readers``. The reader
 checks that a file is what `arfx-oephys` writes and returns the metadata for the
-registry. It does not import neurobank.
+registry: the attributes given with -k, and the versions of arfx-oephys that
+wrote the entries. It does not import neurobank.
 
 """
 
@@ -21,17 +22,6 @@ USER_ATTRIBUTES = "user_attributes"
 # Files written before arfx-oephys recorded USER_ATTRIBUTES can't say which of
 # their attributes were given by the user, so only these are taken.
 LEGACY_KEYS = ("experimenter", "animal", "bird", "experiment", "protocol")
-
-# Only the fields that are searched on are registered, as for the spikes-pprox
-# reader; everything else stays in the file and can be registered later.
-REGISTERED_KEYS = (
-    "animal",
-    "experimenter",
-    "recording",
-    "protocol",
-    "processed_by",
-    "presenter",
-)
 
 # Names used before the registry's were agreed, and ARF's own attribute for the
 # program that wrote the entry (e.g. "org.meliza.arfx/arfx-oephys 3.0.2")
@@ -69,6 +59,7 @@ def _json_value(value: Any) -> Any:
 
 
 def _entry_metadata(entry: h5py.Group) -> dict[str, Any]:
+    entry_name = entry.name.lstrip("/")
     names = entry.attrs.get(USER_ATTRIBUTES)
     if names is None:
         names = LEGACY_KEYS
@@ -78,7 +69,7 @@ def _entry_metadata(entry: h5py.Group) -> dict[str, Any]:
     names = [*names, "entry_creator"]
     metadata = {}
     for name in names:
-        if name not in entry.attrs or RENAMED.get(name, name) not in REGISTERED_KEYS:
+        if name not in entry.attrs:
             continue
         try:
             value = _json_value(entry.attrs[name])
@@ -88,7 +79,17 @@ def _entry_metadata(entry: h5py.Group) -> dict[str, Any]:
     for old, new in RENAMED.items():
         if old in metadata:
             value = metadata.pop(old)
+            if new in metadata and metadata[new] != value and old != "entry_creator":
+                raise ValueError(
+                    f"entry '{entry_name}' has {old}={value!r} and "
+                    f"{new}={metadata[new]!r}"
+                )
             metadata.setdefault(new, value)
+    if not isinstance(metadata.get("processed_by", ""), str):
+        raise ValueError(
+            f"entry '{entry_name}' has a processed_by that isn't a string: "
+            f"{metadata['processed_by']!r}"
+        )
     return metadata
 
 
@@ -100,7 +101,12 @@ def _check_continuous(entry: h5py.Group) -> None:
             and "sampling_rate" in dset.attrs
         ):
             rate = dset.attrs["sampling_rate"]
-            if np.isfinite(rate) and rate > 0:
+            if (
+                np.issubdtype(np.asarray(rate).dtype, np.number)
+                and np.size(rate) == 1
+                and np.isfinite(rate)
+                and rate > 0
+            ):
                 return
     raise ValueError(
         f"entry '{entry.name.lstrip('/')}' has no sampled dataset with a "
@@ -118,7 +124,8 @@ def read_metadata(path: Path) -> dict[str, Any]:
     try:
         fp = h5py.File(path, "r")
     except OSError as e:
-        raise ValueError(f"not an HDF5 file ({e})") from None
+        # also raised for a file that is locked or can't be read
+        raise ValueError(f"could not open as an HDF5 file ({e})") from None
     with fp:
         if "arf_version" not in fp.attrs:
             raise ValueError("not an ARF file: no arf_version attribute")
